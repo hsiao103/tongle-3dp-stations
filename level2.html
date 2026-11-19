@@ -234,6 +234,210 @@ const CONFIG = {
   ]
 };
 
+/* =====================================================================
+   題庫（B、C、D 三套）：與 A 套（上面的原題）考同樣的學習概念，但情境、數字、選項不同。
+   每次「重來」會隨機抽一套（不會連續抽到同一套）；整個流程用同一套，畫面上的數值也跟著該套變。
+   每題只有一個正解；答錯的說明不能直接說出答案（answerKeys 是答錯說明與提示都不能出現的字）。
+   ===================================================================== */
+(function () {
+  const Q = (title, prompt, options, answerKeys, learn, hints) => ({ kind: "choice", title, prompt, options, answerKeys, learn, hints });
+  const o = (id, text, why, correct) => (correct ? { id, text, correct: true } : { id, text, why });
+  const pick = (title, prompt, readings, correct, objs, why, learn, hints) => ({ kind: "pick", title, prompt, readings, pick: { correct, objs, why }, answerKeys: [], learn, hints });
+  const P1 = "看讀數：這卷線材可以直接印嗎？請在 3D 場景（或下方按鈕）點出需要處理的地方；如果你覺得沒問題，就按「沒問題，放行」。";
+  const P2 = "看讀數：列印平台準備好了嗎？請點出需要處理的地方；如果你覺得沒問題，就按「沒問題，放行」。";
+  const FIL_WHY = { nozzle: "噴頭負責把線材熔化擠出來，讀數裡它沒有任何異常。", fan: "風扇只負責冷卻剛擠出來的線材，和線材本身的狀況無關。", screen: "螢幕只是顯示讀數，要處理的是讀數背後的東西。" };
+  const PLT_WHY = { knob: "調平旋鈕是用來調整平台高低的。這台機器的四角間隙已經一致，旋鈕不是現在的問題。", fan: "風扇是冷卻用的，和列印板的狀況無關。", screen: "螢幕只能看數字，不能把板子處理好。", spool: "線材卷和列印平台沒有關係。" };
+  const FIL_OBJS = ["spool", "nozzle", "fan", "screen"], PLT_OBJS = ["bed", "knob", "fan", "screen", "spool"];
+
+  const B = {
+    label: "B 套", env: { room: 14, bedTarget: 60, bedNow: 41 }, fila: { remainG: 12, needG: 27 },
+    plate: { gaps: { lf: 0.10, rf: 0.11, lb: 0.10, rb: 0.10 }, tol: 0.05, seated: false, seatNote: "左後角輕按會翹動，邊緣有縫隙，一推就滑" },
+    questions: {
+      design: Q("生成公仔", "同學用 AI 生成了一隻校長造型的公仔，放進軟體後，畫面跳出好幾處紅色警告（像是破洞、太薄的地方）。接下來最合適的做法是？", [
+        o("a", "先把有問題的地方修補、加厚到能列印，再繼續切片", "", true),
+        o("b", "紅色警告只是提醒，不用理它，直接切片", "警告就是在告訴你哪裡可能印不出來，忽略它很容易印到一半失敗。"),
+        o("c", "把整隻公仔縮小一半，問題就會自己消失", "縮小只會讓薄的地方更薄、破洞還在，並沒有解決問題。"),
+        o("d", "換一種比較貴的耗材，就不會失敗", "耗材貴不貴不會改變模型本身的結構問題。")],
+        ["修補", "加厚"], "模型有破洞或太薄的地方，是模型本身的問題，要在軟體裡先處理好，換材料或縮放都救不了。",
+        ["紅色警告在提醒你什麼？", "問題出在模型本身，不是機器或材料。", "要「處理」警告，而不是躲開它。"]),
+      buy: Q("購買材料", "校慶攤位上，小朋友會直接拿著公仔玩。要選安全、價格低、容易買到、不需要特別防護的機型與耗材，要買哪一組？", [
+        o("a", "FDM 印表機＋PLA 線材", "", true),
+        o("b", "光固化印表機＋樹脂", "樹脂沒固化完全時會刺激皮膚，還要手套與清洗，不適合讓小朋友直接拿著玩。"),
+        o("c", "FDM 印表機＋ABS 線材", "ABS 味道較重又容易翹曲，需要通風與保溫，攤位環境不好控制。"),
+        o("d", "FDM 印表機＋尼龍線材", "尼龍很吸濕，要先烘乾才能印，對新手和現場都太麻煩。")],
+        ["PLA"], "現場要考慮安全、操作難度和成本。FDM 搭配 PLA 最容易上手，也最適合學生和一般現場。",
+        ["小朋友會直接拿在手上，先想安全。", "有些材料有氣味、要戴手套、或要先烘乾。", "選「最容易上手又最安全」的那一組。"]),
+      slice: Q("切片設定", "公仔高約 10 公分，右手舉著一面往前伸出的小旗子，要在展示櫃擺一星期。請選出最合適的切片設定：", [
+        o("a", "層高 0.2 mm、填充 15%、加寬底座（brim）、支撐只開在旗子下面", "", true),
+        o("b", "層高 0.4 mm、填充 100%、不加底座、整隻公仔都開支撐", "層高太粗，表面紋路明顯；填充全滿又慢又浪費；整隻都開支撐，拆除時很容易把細的地方弄壞。"),
+        o("c", "層高 0.2 mm、填充 0%、不加底座、完全不開支撐", "內部全空容易壓壞；沒有底座站不穩，旗子下面也沒有東西托住，會垂落。"),
+        o("d", "層高 0.05 mm、填充 15%、加寬底座、支撐只開在旗子下面", "層高 0.05 mm 會讓列印時間變得非常長，教室活動根本做不完。")],
+        ["0.2", "15%", "支撐只開在"], "切片是在速度、品質和強度之間取平衡：層高適中、填充不用滿，底座幫忙站穩，支撐只放在真正懸空的地方。",
+        ["想想：品質、時間、材料，要不要都做到極端？", "第一關學過：哪裡懸空，哪裡才需要支撐。", "有一個選項在「時間、強度、支撐」上都沒有走極端。"]),
+      filament: pick("檢核一：耗材", P1, "filament", "spool", FIL_OBJS, Object.assign({}, FIL_WHY, { release: "讀數裡有一項不夠用，現在放行，印到一半就會沒料。" }),
+        "印之前要比對「剩餘量」和「預估用量」。不夠就先換新卷；換線時要先把噴頭加熱到線材可以熔化的溫度，再送線，否則容易卡住。",
+        ["把「剩餘」和「預估用量」兩個數字放在一起比比看。", "問題出在線材本身，不在機器的其他零件。", "線材是裝在哪個零件上的？"]),
+      plate: pick("檢核二：板子", P2, "plate", "bed", PLT_OBJS, Object.assign({}, PLT_WHY, { release: "有一項讀數顯示板子沒有固定好。板子一晃，第一層就會被拖歪、黏不牢。" }),
+        "第一層要黏得好，列印板必須確實固定在加熱床上。磁吸式列印板要整片吸平，有時會忘了吸上去，或有一個角沒壓好。確認板子固定之後，再看四角間隙；差太多才需要轉調平旋鈕。",
+        ["四個角的間隙數字看起來怎麼樣？再把其他讀數一項一項看過，有沒有哪一項不是「正常」的？", "問題出在平台上那片可以拆下來的板子，不在機器的其他零件。", "那片板子是靠什麼固定在加熱床上的？有沒有確實固定好？"]),
+      env: Q("檢核三：環境", "看讀數：工作環境適合印嗎？", [
+        o("a", "把機器移到沒有冷氣直吹的位置（或加擋風罩），等平台升到目標溫度再放行", "", true),
+        o("b", "把平台目標溫度調到最高，硬加熱上去", "PLA 受熱太高會軟化變形，平台也可能受損，而且被冷風吹著時加熱效率很差。"),
+        o("c", "不管它，直接開始印，印出來再看", "平台溫度不夠、又有冷風直吹，第一層容易黏不牢，會翹邊或脫落。"),
+        o("d", "把風扇開到最大，讓溫度平均", "列印用的風扇是冷卻線材的，開越大只會讓第一層更冷。")],
+        ["冷氣", "擋風", "等平台升到"], "冷氣出風口直吹機器，平台升不到目標溫度，第一層就容易翹邊。先改善環境，再等溫度到位。",
+        ["比一比「平台目標溫度」和「實際溫度」。", "問題出在機器旁邊的環境。", "不是用機器的設定去硬撐，而是先改善環境。"]),
+      watch: Q("列印巡檢", "列印到第 3 層，公仔底座的右前角翹起了，你輕輕碰一下板子，發現板子有點晃。你要怎麼處理？", [
+        o("a", "暫停列印，把板子重新固定好並清潔，加上 brim（外圈）增加附著後重印", "", true),
+        o("b", "用膠帶把翹起的角貼在平台上，繼續印", "膠帶只是暫時壓住，板子本身的問題沒解決，印到後面還是會移位。"),
+        o("c", "把噴嘴溫度調到最高，讓塑膠黏得更牢", "噴嘴溫度太高會牽絲、表面變差，並不能讓晃動的板子穩下來。"),
+        o("d", "不管它，繼續印，等印完再說", "翹起的地方會越翹越高，可能撞到噴頭，甚至整個公仔從平台上脫落。")],
+        ["brim", "暫停"], "翹邊是底部附著不足；板子會晃，是更根本的原因。要停下來把板子固定好、清潔，並加大底部接觸面積（brim）。",
+        ["邊角翹起代表底部「黏不住」。", "板子會晃，代表問題不只在邊角。", "要先停下來，處理根本原因，再增加底部的接觸面積。"]),
+      post: Q("取件與素模處理", "公仔印好了，底座摸起來還有點燙，同學想馬上把它撬起來。你會怎麼做？", [
+        o("a", "等平台冷卻再取下，用斜口鉗剪掉支撐，砂紙由粗到細打磨", "", true),
+        o("b", "趁熱用力撬，撬壞了再用膠水黏起來", "趁熱撬容易撕破底部，還可能燙傷；壞掉再黏，強度和外觀都會變差。"),
+        o("c", "先上色，再打磨表面", "打磨會把剛上好的顏色磨掉，順序反了。"),
+        o("d", "用打火機把支撐燒掉", "PLA 受熱會軟化變形，火焰還會把公仔燻黑，也有安全風險。")],
+        ["冷卻", "斜口鉗", "由粗到細"], "素模處理的順序：冷卻後取下 → 剪除支撐 → 打磨（砂紙由粗到細）→ 才上色。每一步都要避免傷到模型，也要注意自己的安全。",
+        ["剛印完的東西很燙，也比較軟。", "取下、拆支撐、打磨，要用合適的工具，不能硬來。", "打磨是在「上色之前」，而且砂紙的粗細有順序。"]),
+      paint: Q("上色", "素模打磨好了，表面還有一點手指印和粉塵。要開始上色，下面哪一個做法正確？", [
+        o("a", "先擦乾淨表面，再噴底漆、分層薄塗顏色，最後噴透明保護漆；在通風處操作", "", true),
+        o("b", "直接上色，顏色會把髒東西蓋住", "表面有油和粉塵，顏料會附著不牢，容易掉漆或出現斑點。"),
+        o("c", "先噴透明漆，再上顏色", "透明漆是最後用來覆蓋、守護顏色的，先噴會讓後面的顏色附著不牢。"),
+        o("d", "把窗戶關起來，在座位旁邊直接噴漆", "噴漆有氣味也有細小粉塵，要在空氣流通的地方，並讓旁邊的人離遠一點。")],
+        ["底漆", "保護漆", "通風處"], "上色前先把表面弄乾淨：底漆（讓顏色附著、遮住層紋）→ 分層薄塗顏色 → 透明保護漆。噴漆一定要在通風處。",
+        ["上色前，表面要先處理好。", "有「打底」「上色」「保護」三個層次，順序很重要。", "別忘了噴漆的安全：空氣要流通。"])
+    }
+  };
+
+  const Cc = {
+    label: "C 套", env: { room: 11, bedTarget: 60, bedNow: 35 }, fila: { remainG: 24, needG: 30 },
+    plate: { gaps: { lf: 0.10, rf: 0.10, lb: 0.09, rb: 0.10 }, tol: 0.05, seated: false, seatNote: "板子沒有對準加熱床，往右偏了約 1 cm，邊緣懸在外面" },
+    questions: {
+      design: Q("生成公仔", "你想把一隻校園公仔的帽簷設計成像紙一樣薄薄的一片，放進軟體檢查時，它說「這個地方太薄，無法列印」。你要怎麼辦？", [
+        o("a", "把帽簷加厚到可以列印的厚度（或改一下設計），再切片", "", true),
+        o("b", "不用理它，印出來再看看", "太薄的地方可能根本印不出來，或一碰就斷，直接印很容易失敗。"),
+        o("c", "把整隻公仔放大三倍", "整體放大不一定能讓薄的地方變厚，還會花更多時間和材料。"),
+        o("d", "把帽簷整個刪掉，什麼都不要", "只要把問題處理好就能印，不需要為了印出來就把設計都拿掉。")],
+        ["加厚", "改一下設計"], "模型有太薄的地方，要在軟體裡先處理，或調整設計，不能指望機器把它印出來。",
+        ["軟體說哪裡有問題？", "問題出在設計太薄，不是機器的問題。", "要「改設計」，讓它能被一層一層印出來。"]),
+      buy: Q("購買材料", "這次是第一次辦活動，操作的同學都是新手，希望失敗率低、不用戴防護裝備，也不想花太多錢。要買哪一組？", [
+        o("a", "FDM 印表機＋PLA 線材", "", true),
+        o("b", "光固化印表機＋樹脂", "樹脂要戴手套、清洗、再二次固化，對第一次操作的新手太複雜。"),
+        o("c", "FDM 印表機＋PC（聚碳酸酯）線材", "PC 要很高的溫度和密閉空間才印得好，不適合新手與一般教室。"),
+        o("d", "金屬粉末 3D 列印服務", "金屬列印要專業設備和高成本，遠遠超出學校活動的預算。")],
+        ["PLA"], "新手、教室、低預算，最合適的是 FDM 搭配 PLA：好上手、味道小、價格低。",
+        ["先想：操作的人是新手還是專家？", "有些材料要很高溫、要密閉、或要專業設備。", "選「新手最容易成功」的那一組。"]),
+      slice: Q("切片設定", "公仔高約 6 公分，兩手往外張開（手臂懸空），要在 1 小時內印好、放在桌上展示。請選出最合適的切片設定：", [
+        o("a", "層高 0.24 mm、填充 10%、加寬底座（brim）、支撐只開在手臂下面", "", true),
+        o("b", "層高 0.05 mm、填充 100%、不加底座、完全不開支撐", "層高太細又填滿，一小時根本印不完；沒有底座也沒有支撐，站不穩、手臂還會垂落。"),
+        o("c", "層高 0.4 mm、填充 0%、加寬底座、整隻都開支撐", "層高太粗、內部全空，既不好看又脆弱；整隻都開支撐會浪費材料又難拆。"),
+        o("d", "層高 0.24 mm、填充 10%、不加底座、完全不開支撐", "沒有底座容易倒，手臂下面沒有支撐會垂落成一團。")],
+        ["0.24", "10%", "支撐只開在"], "有時間限制時，可以把層高調粗一點、填充調低一點，但仍要保留底座和必要的支撐。",
+        ["有時間限制，品質和速度要怎麼取捨？", "手臂往外張開，下面是空的。", "有一個選項在「時間、底座、支撐」上都兼顧到。"]),
+      filament: pick("檢核一：耗材", P1, "filament", "spool", FIL_OBJS, Object.assign({}, FIL_WHY, { release: "剩餘量看起來差不多，但還是少於需要的量。現在放行，印到最後一段可能會沒料。" }),
+        "「差一點點」也不夠。印之前要比對「剩餘量」和「預估用量」，不夠就先換新卷，不要賭運氣。",
+        ["把「剩餘」和「預估用量」兩個數字放在一起比比看，只差一點，算夠嗎？", "問題出在線材本身，不在機器的其他零件。", "線材是裝在哪個零件上的？"]),
+      plate: pick("檢核二：板子", P2, "plate", "bed", PLT_OBJS, Object.assign({}, PLT_WHY, { release: "有一項讀數顯示板子的位置不對。板子沒放好，第一層就會印到板子外面。" }),
+        "板子要確實吸在加熱床的正確位置：位置對準、整片吸平。位置歪了，第一層可能直接印到板子外面。",
+        ["四個角的間隙數字看起來怎麼樣？再把其他讀數一項一項看過，有沒有哪一項不是「正常」的？", "問題出在平台上那片可以拆下來的板子，不在機器的其他零件。", "那片板子有沒有放在正確的位置上？"]),
+      env: Q("檢核三：環境", "看讀數：工作環境適合印嗎？", [
+        o("a", "把機器移到關著窗、沒有風的位置（或加擋風罩），等平台升到目標溫度再放行", "", true),
+        o("b", "把機器靠窗放，這樣空氣比較新鮮", "窗邊有冷風，平台會更難升溫，第一層也容易黏不牢。"),
+        o("c", "把印表機的外殼拆掉，讓它散熱更快", "拆掉外殼會讓冷風更直接吹到機器，更不容易保溫，還有安全風險。"),
+        o("d", "不管它，直接開始印，印出來再看", "平台溫度不夠、又有冷風，第一層容易黏不牢，會翹邊或脫落。")],
+        ["關著窗", "擋風", "等平台升到"], "環境太冷又有風，平台升不到目標溫度，第一層就容易翹邊。先把風擋住、讓環境變暖，再等溫度到位。",
+        ["比一比「平台目標溫度」和「實際溫度」。", "問題出在機器旁邊的環境：冷、還有風。", "不是用機器的設定去硬撐，而是先改善環境。"]),
+      watch: Q("列印巡檢", "列印到第 8 層，公仔底座的右前角翹起，離開平台了，旁邊還有一台電風扇正對著機器吹。你要怎麼處理？", [
+        o("a", "暫停列印，把風擋住、清潔平台，加上 brim（外圈）增加附著後重印", "", true),
+        o("b", "把風扇轉到更強，讓塑膠快點變硬", "風越強，翹起的地方冷縮得越厲害，只會更糟。"),
+        o("c", "用手壓住翹起的角，一邊印一邊壓", "手靠近移動的噴頭很危險，而且壓一下也不會讓它真的黏住。"),
+        o("d", "不管它，繼續印，等印完再說", "翹起的地方會越翹越高，可能撞到噴頭，甚至整個公仔從平台上脫落。")],
+        ["brim", "暫停"], "風會讓底部冷縮、黏不住。要停下來擋風、清潔，並加大底部接觸面積（brim），不要硬印。",
+        ["邊角翹起代表底部「黏不住」，旁邊還有什麼會影響它？", "風會讓剛印好的底部很快冷縮。", "要先停下來，處理風，並增加底部的接觸面積。"]),
+      post: Q("取件與素模處理", "公仔從平台取下後，支撐剪掉了，但表面還有粗糙的小疙瘩和明顯的層紋。接下來怎麼做？", [
+        o("a", "用砂紙由粗到細慢慢打磨，直到摸起來平滑，再上色", "", true),
+        o("b", "直接厚厚塗一層漆，把粗糙的地方蓋住", "漆蓋不住明顯的層紋和疙瘩，反而會讓表面更不平整。"),
+        o("c", "用刀子大力刮平", "用力刮很容易把模型削壞、割傷自己，應該用適合的工具慢慢處理。"),
+        o("d", "用熱風槍把表面燙平", "PLA 受熱會軟化變形，公仔的造型會走樣。")],
+        ["砂紙", "由粗到細"], "素模處理的順序：冷卻後取下 → 剪除支撐 → 打磨（砂紙由粗到細）→ 才上色。",
+        ["表面粗糙，要用哪種工具讓它變平滑？", "不要用蠻力，也不要用高溫。", "打磨用的東西，有「粗」和「細」的順序。"]),
+      paint: Q("上色", "公仔需要「橘色帽子」和「藍色上衣」兩種顏色，兩色的交界處不能糊在一起。下面哪一個做法正確？", [
+        o("a", "先噴底漆，等乾後先上一種顏色，再遮好交界處上另一種顏色，最後噴保護漆；在通風處操作", "", true),
+        o("b", "兩種顏色同時用力塗上去，在交界處混在一起", "顏色未乾時混在一起會糊掉、變髒。"),
+        o("c", "先上色，最後才補一層打底的漆", "打底那一層要最先做，是用來讓顏色附著的，順序不能顛倒。"),
+        o("d", "關上教室窗戶，在座位旁直接噴漆", "噴漆有氣味也有細小粉塵，要在空氣流通的地方，並讓旁邊的人離遠一點。")],
+        ["底漆", "保護漆", "通風處"], "多種顏色要等第一種乾了，遮好交界再上下一種。順序：底漆 → 分區薄塗顏色 → 透明保護漆；噴漆要在通風處。",
+        ["兩種顏色，要一個一個上，還是一起上？", "有「打底」「上色」「保護」三個層次，順序很重要。", "別忘了噴漆的安全：空氣要流通。"])
+    }
+  };
+
+  const D = {
+    label: "D 套", env: { room: 16, bedTarget: 60, bedNow: 44 }, fila: { remainG: 150, needG: 32, wet: true },
+    plate: { gaps: { lf: 0.10, rf: 0.10, lb: 0.11, rb: 0.10 }, tol: 0.05, seated: true, dirty: true },
+    questions: {
+      design: Q("生成公仔", "AI 生成的公仔模型看起來很漂亮，但它的雙腳只有一個點碰到地面，站不穩。印之前最合適的做法是？", [
+        o("a", "調整模型，讓腳底有足夠的接觸面積（或加底座），再切片", "", true),
+        o("b", "直接印，印出來用手扶著", "站不穩的模型，印的時候也容易倒，印出來也無法自己站立。"),
+        o("c", "把公仔縮小，這樣比較輕就站得住", "縮小並不會讓腳底碰到地面的地方變大，反而讓腳更細、更容易斷。"),
+        o("d", "把公仔倒過來放", "倒過來放，頭和手會變成懸空，問題反而更多。")],
+        ["接觸面積", "加底座"], "模型要能穩穩站住，底部要有足夠的接觸面積，必要時可以加底座。",
+        ["模型要能自己站得住，要看底部的什麼？", "問題出在模型的形狀，不是機器。", "要讓底部「碰到地面的面積」變大。"]),
+      buy: Q("購買材料", "社團教室是共用空間，有幾位同學對氣味很敏感，預算也有限。要買哪一組機型與耗材？", [
+        o("a", "FDM 印表機＋PLA 線材", "", true),
+        o("b", "光固化印表機＋樹脂", "樹脂有明顯的氣味，還要戴手套、通風，不適合有人對氣味敏感的共用空間。"),
+        o("c", "FDM 印表機＋ABS 線材", "ABS 印的時候味道比較重，也需要保溫與通風，敏感的同學會不舒服。"),
+        o("d", "工業用大型列印機", "工業機器要專業人員與場地，預算也遠超過學校社團。")],
+        ["PLA"], "味道小、安全、容易上手的 FDM＋PLA，最適合共用空間與預算有限的教學現場。",
+        ["先想：有同學對什麼特別敏感？", "有些材料的味道比較重，有些要特殊場地。", "選「味道小又好上手」的那一組。"]),
+      slice: Q("切片設定", "公仔高約 12 公分，要掛在書包上，常會被摔到、碰到。請選出最合適的切片設定：", [
+        o("a", "層高 0.2 mm、填充 25%、外圈 3 圈、加寬底座，支撐只開在懸空處", "", true),
+        o("b", "層高 0.4 mm、填充 5%、外圈 1 圈、不加底座、不開支撐", "又粗又空、外殼又薄，一摔就碎；沒有底座、沒有支撐，懸空的地方還會垂落。"),
+        o("c", "層高 0.05 mm、填充 100%、外圈 8 圈、整隻都開支撐", "層高太細、全部填滿，要印非常久；整隻都開支撐也很浪費。"),
+        o("d", "層高 0.2 mm、填充 0%、外圈 1 圈、加寬底座", "內部全空、外殼又薄，經不起摔；懸空的地方也沒有支撐。")],
+        ["25%", "3 圈", "支撐只開在"], "想要耐摔，可以把填充和外圈加強一點，但不用極端；底座和必要的支撐仍然要保留。",
+        ["要耐摔，哪些設定要比平常更「強」一點？", "但太極端，時間和材料又會爆表。", "有一個選項在「強度」上加強了，卻沒有走到極端。"]),
+      filament: pick("檢核一：耗材", P1, "filament", "spool", FIL_OBJS, Object.assign({}, FIL_WHY, { release: "讀數裡有一項異常。線材受潮會在擠出時爆音、表面粗糙，現在放行，印出來會牽絲、品質很差。" }),
+        "線材不只要「夠」，還要「乾燥」。受潮的線材會爆音、起泡、牽絲，要先烘乾或換一卷乾燥的。",
+        ["讀數不只有克數，把每一項都看過。", "問題出在線材本身，不在機器的其他零件。", "線材是裝在哪個零件上的？"]),
+      plate: pick("檢核二：板子", P2, "plate", "bed", PLT_OBJS, Object.assign({}, PLT_WHY, { release: "有一項讀數顯示板子表面不乾淨。有油、有指紋，第一層就會黏不牢。" }),
+        "列印板表面要乾淨。手指印和油會讓第一層黏不牢，印之前要用適合的清潔方式擦乾淨。",
+        ["四個角的間隙數字看起來怎麼樣？再把其他讀數一項一項看過，有沒有哪一項不是「正常」的？", "問題出在平台上那片可以拆下來的板子，不在機器的其他零件。", "板子上有沒有什麼，會讓第一層黏不牢？"]),
+      env: Q("檢核三：環境", "看讀數：工作環境適合印嗎？", [
+        o("a", "把機器移離門口、避開人來人往的冷風（或加擋風罩），等平台升到目標溫度再放行", "", true),
+        o("b", "不用移動，把門一直開著，讓空氣流通", "開著門風一直吹進來，平台更難升溫，第一層也更容易黏不牢。"),
+        o("c", "把平台目標溫度設到最高", "PLA 受熱太高會軟化變形，平台也可能受損，而且被風吹著加熱效率很差。"),
+        o("d", "不管它，直接開始印，印出來再看", "平台溫度不夠、又一直有冷風，第一層容易黏不牢，會翹邊或脫落。")],
+        ["移離門口", "擋風", "等平台升到"], "擺在門口，每次開門都有冷風吹進來，平台升不到目標溫度。先換位置或擋風，再等溫度到位。",
+        ["比一比「平台目標溫度」和「實際溫度」。", "問題出在機器擺放的位置。", "不是用機器的設定去硬撐，而是先改善環境。"]),
+      watch: Q("列印巡檢", "列印到第 5 層，公仔底座的右前角翹起了，翹得不嚴重。有同學說「還好啦，印完再處理就好」。你怎麼看？", [
+        o("a", "不可以。要暫停，找出附著不足的原因，加上 brim（外圈）後重印", "", true),
+        o("b", "可以。翹得不嚴重，繼續印沒關係", "翹起的地方會越翹越高，可能撞到噴頭，甚至整個公仔從平台上脫落。"),
+        o("c", "把列印速度調到最快，趕快印完", "速度快並不會讓翹起的地方黏回去，反而讓它更不穩。"),
+        o("d", "把噴嘴溫度調到最高，讓它黏回去", "噴嘴溫度太高會牽絲，也不會讓翹起的角黏回平台。")],
+        ["brim", "暫停"], "翹邊不會自己好。發現就要停下來處理根本原因，並加大底部接觸面積（brim）。",
+        ["翹起的地方，越印會怎麼樣？", "繼續印、加速或加溫，都不會讓它黏回去。", "要先停下來，並且增加底部的接觸面積。"]),
+      post: Q("取件與素模處理", "公仔帽簷下的支撐貼得很緊，同學想直接用手把它扯掉。你會怎麼做？", [
+        o("a", "等冷卻後，用斜口鉗小心分段剪除，再用砂紙修整", "", true),
+        o("b", "用手使勁扯掉，反正之後會上色", "硬扯會把帽簷撕出缺口，上色也蓋不住。"),
+        o("c", "用榔頭輕輕敲掉", "敲打會讓公仔斷裂或變形，也很危險。"),
+        o("d", "用熱風槍把支撐燙軟再扯", "PLA 受熱會軟化變形，公仔本體也會一起走樣。")],
+        ["斜口鉗", "分段"], "拆支撐要用合適的工具，小心分段處理，不要用蠻力或高溫，剪完再修整。",
+        ["支撐貼得很緊，用手會怎麼樣？", "不要用蠻力，也不要用高溫。", "要用專門的工具，一小段一小段處理。"]),
+      paint: Q("上色", "噴漆時，漆一次噴很多，表面開始流淌、積成一坨。接下來要怎麼上色才正確？", [
+        o("a", "分層薄噴，等每一層乾了再噴下一層；先噴底漆，最後噴保護漆；在通風處操作", "", true),
+        o("b", "一次噴更多，把流淌的地方蓋過去", "再噴更多只會流得更嚴重、積得更厚。"),
+        o("c", "用吹風機對著一直吹，讓漆快點乾", "吹風機的熱風會讓漆起皺，也可能讓 PLA 變形。"),
+        o("d", "把門窗都關起來，才不會吹到灰塵", "噴漆有氣味也有細小粉塵，要在空氣流通的地方，並讓旁邊的人離遠一點。")],
+        ["薄噴", "通風處"], "上色要「薄」：分層薄塗，每層乾了再下一層。順序：底漆 → 分層顏色 → 保護漆，並且要在通風處。",
+        ["漆一次噴很多，會發生什麼事？", "有「打底」「上色」「保護」三個層次，順序很重要。", "要慢一點、薄一點，一層一層來。"])
+    }
+  };
+
+  CONFIG.banks = { A: { label: "A 套", env: CONFIG.env, fila: CONFIG.fila, plate: CONFIG.plate, questions: CONFIG.questions }, B, C: Cc, D };
+})();
+
 </script>
 <style>
 :root{
@@ -609,7 +813,16 @@ const Anim = (() => {
 const Logic = (() => {
   "use strict";
   const C = CONFIG;
-  const STEPS = C.steps, Q = C.questions;
+  const STEPS = C.steps;
+  /* ---- 題庫：目前使用的那一套（A/B/C/D）。reduce 與還原時會依狀態切換 ---- */
+  const BANKS = C.banks, BANK_KEYS = Object.keys(BANKS);
+  let curBank = "A";
+  function useBank(key) {
+    if (!BANKS[key]) key = BANK_KEYS[0];
+    const b = BANKS[key]; C.questions = b.questions; C.env = b.env; C.fila = b.fila; C.plate = b.plate; curBank = key; return key;
+  }
+  const pickBank = (seed, avoid) => { let i = (hash("bank" + (seed >>> 0)) >>> 0) % BANK_KEYS.length; if (avoid && BANK_KEYS[i] === avoid && BANK_KEYS.length > 1) i = (i + 1) % BANK_KEYS.length; return BANK_KEYS[i]; };
+  const Q = new Proxy({}, { get: (_, k) => C.questions[k], has: (_, k) => k in C.questions });
   const QIDS = STEPS.flatMap((s) => s.qs);
   const stepOfQ = {}; STEPS.forEach((s, i) => s.qs.forEach((q) => { stepOfQ[q] = i; }));
   const GATE = STEPS.findIndex((s) => s.gate);
@@ -654,7 +867,7 @@ const Logic = (() => {
     const f = C.fila, p = C.plate, e = C.env, g = p.gaps;
     if (qid === "filament") return [
       { label: "線材種類", value: "PLA", abnormal: false },
-      { label: "受潮狀況", value: "乾燥，沒有爆音", abnormal: false },
+      { label: "受潮狀況", value: f.wet ? "有爆音，線材表面起小泡" : "乾燥，沒有爆音", abnormal: !!f.wet },
       { label: "線材卷剩餘", value: f.remainG + " g", abnormal: f.remainG < f.needG },
       { label: "這隻公仔預估用量", value: f.needG + " g", abnormal: false }
     ];
@@ -662,27 +875,27 @@ const Logic = (() => {
       const vals = [g.lf, g.rf, g.lb, g.rb]; const spread = Math.max.apply(null, vals) - Math.min.apply(null, vals);
       return [
         { label: "平台材質", value: "PEI 彈性片（磁吸式，吸在加熱床上）", abnormal: false },
-        { label: "表面狀態", value: "乾淨，沒有指紋油汙", abnormal: false },
+        { label: "表面狀態", value: p.dirty ? "有手指印和一層油光" : "乾淨，沒有指紋油汙", abnormal: !!p.dirty },
         { label: "四角間隙（紙張法）", value: "左前 " + g.lf.toFixed(2) + "、右前 " + g.rf.toFixed(2) + "、左後 " + g.lb.toFixed(2) + "、右後 " + g.rb.toFixed(2) + " mm（差距在容許內）", abnormal: spread > p.tol },
-        { label: "板子固定狀況", value: p.seated ? "整片吸平，推不動" : "右前角輕按會翹動，邊緣有縫隙，一推就滑", abnormal: !p.seated }
+        { label: "板子固定狀況", value: p.seated ? "整片吸平，推不動" : (p.seatNote || "右前角輕按會翹動，邊緣有縫隙，一推就滑"), abnormal: !p.seated }
       ];
     }
     if (qid === "env") return [
       { label: "室溫", value: e.room + " ℃", abnormal: false },
       { label: "平台目標溫度", value: e.bedTarget + " ℃", abnormal: false },
       { label: "平台目前溫度", value: e.bedNow + " ℃（升溫很慢）", abnormal: e.bedNow < e.bedTarget },
-      { label: "擺放位置", value: "窗邊，冷風直接吹到機器", abnormal: true }
+      { label: "擺放位置", value: e.place || "窗邊，冷風直接吹到機器", abnormal: true }
     ];
     return [];
   }
 
   /* ---------- 初始狀態 ---------- */
-  function initial(group, seed) {
+  function initial(group, seed, avoidBank) {
     const n = C.groupCodes.length; let g = Math.floor(Number(group));
     if (!(g >= 1 && g <= n)) g = 1;
     const hs = {}; QIDS.forEach((q) => { hs[q] = 0; });
     return {
-      v: 1, group: g, seed: (seed >>> 0) || 1, linked: false, phase: "intro", step: 0,
+      v: 1, group: g, seed: (seed >>> 0) || 1, bank: pickBank((seed >>> 0) || 1, avoidBank), linked: false, phase: "intro", step: 0,
       done: {}, started: false,
       failCount: 0, stepFails: 0, cooldownUntil: 0, locked: false,
       hintSeen: hs, hintsUsed: 0, completed: false, animating: false, pending: null
@@ -700,6 +913,7 @@ const Logic = (() => {
   /* ---------- 唯一的狀態轉換函式 ---------- */
   function reduce(st, a, now) {
     now = Number(now) || 0;
+    if (st && st.bank && st.bank !== curBank) useBank(st.bank);
     const s = clone(st);
     const rej = (kind, extra) => ({ state: st, fb: Object.assign({ ok: false, kind }, extra || {}) });
     const ok = (kind, extra) => ({ state: s, fb: Object.assign({ ok: true, kind }, extra || {}) });
@@ -793,7 +1007,7 @@ const Logic = (() => {
         s.locked = false; s.stepFails = 0; return ok("unlocked");
       case "reset": {
         if (!checkPin(a.pin)) return rej("badPin");
-        const next = initial(a.group != null ? a.group : s.group, a.seed != null ? a.seed : s.seed + 1);
+        const next = initial(a.group != null ? a.group : s.group, a.seed != null ? a.seed : s.seed + 1, s.bank); useBank(next.bank);
         return { state: next, fb: { ok: true, kind: "reset" } };
       }
     }
@@ -803,13 +1017,13 @@ const Logic = (() => {
   /* ---------- 存檔／還原（嚴格驗證；被改壞或竄改就回到全新狀態）---------- */
   function serialize(s) {
     return JSON.stringify({
-      v: 1, group: s.group, seed: s.seed, linked: s.linked, phase: s.phase, done: s.done, started: s.started,
+      v: 1, group: s.group, seed: s.seed, bank: s.bank, linked: s.linked, phase: s.phase, done: s.done, started: s.started,
       failCount: s.failCount, stepFails: s.stepFails, cooldownUntil: s.cooldownUntil, locked: s.locked,
       hintSeen: s.hintSeen, hintsUsed: s.hintsUsed, completed: s.completed
     });
   }
   function restore(json, now, seed) {
-    const fresh = () => initial(1, seed);
+    const fresh = () => { const f = initial(1, seed); useBank(f.bank); return f; };
     if (!json) return fresh();
     try {
       const o = JSON.parse(json);
@@ -823,7 +1037,8 @@ const Logic = (() => {
       if (!o.done || typeof o.done !== "object" || Array.isArray(o.done)) return fresh();
       if (!Object.keys(o.done).every((k) => QIDS.includes(k) && o.done[k] === true)) return fresh();
       const hs = o.hintSeen; if (!hs || !QIDS.every((k) => isInt(hs[k], 0, 3))) return fresh();
-      const s = initial(o.group, o.seed);
+      if (o.bank !== undefined && !BANKS[o.bank]) return fresh();
+      const s = initial(o.group, o.seed); if (o.bank !== undefined) s.bank = o.bank;
       s.linked = o.linked; s.done = clone(o.done); s.started = o.started;
       /* 順序要說得通：後面的題有做，前面的步驟一定要完成 */
       for (let i = 0; i < STEPS.length; i++) {
@@ -841,6 +1056,7 @@ const Logic = (() => {
       s.failCount = o.failCount; s.stepFails = o.stepFails; s.locked = o.locked; s.hintSeen = clone(hs); s.hintsUsed = o.hintsUsed;
       s.cooldownUntil = Math.min(o.cooldownUntil, (Number(now) || 0) + C.timing.cooldownMs);
       s.animating = false; s.pending = null;
+      useBank(s.bank);
       return s;
     } catch (e) { return fresh(); }
   }
@@ -857,7 +1073,7 @@ const Logic = (() => {
   }
 
   return {
-    initial, reduce, serialize, restore, makeStore, esc, shuffle, hash,
+    initial, reduce, useBank, pickBank, BANK_KEYS, serialize, restore, makeStore, esc, shuffle, hash,
     optionsOf, reviewOptions, readings, isCorrect, whyOf, optionIds, cooldownLeft, checkPin, codeFor, successInfo,
     stepComplete, firstOpenStep, missingChecks,
     consts: { STEPS, QIDS, GATE, stepOfQ }
@@ -886,8 +1102,8 @@ const Tests = (() => {
   /* 小工具：依序套用動作（時間自己往前走） */
   function drive(st, t) {
     const o = { st, t, fb: null };
-    o.go = (a, dt) => { o.t += (dt == null ? CD + 50 : dt); const r = L.reduce(o.st, a, o.t); o.st = r.state; o.fb = r.fb; return r.fb; };
-    o.ok = (q) => o.go({ type: "answer", qid: q, option: correctOf(q) });
+    o.go = (a, dt) => { L.useBank(o.st.bank); o.t += (dt == null ? CD + 50 : dt); const r = L.reduce(o.st, a, o.t); o.st = r.state; o.fb = r.fb; return r.fb; };
+    o.ok = (q) => { L.useBank(o.st.bank); return o.go({ type: "answer", qid: q, option: correctOf(q) }); };
     o.end = () => o.go({ type: "animEnd" }, 0);
     return o;
   }
@@ -1158,9 +1374,71 @@ const Tests = (() => {
     const afterWatch = Anim.stateFor({ design: 1, buy: 1, slice: 1, filament: 1, plate: 1, env: 1, watch: 1 }, true, null, 1); eq(afterWatch.warp, 0); eq(afterWatch.print, 1);
   });
 
+  /* ---------- T13 題庫（A/B/C/D 四套） ---------- */
+  const forBanks = (fn) => { try { L.BANK_KEYS.forEach((k) => { L.useBank(k); fn(k, C.banks[k]); }); } finally { L.useBank("A"); } };
+  const withBank = (key, seed) => { const s = L.initial(1, seed || 7); s.bank = key; L.useBank(key); return s; };
+  T("T13-1 共有 4 套題庫，每套都有全部 9 題、題型與 A 套一致", () => {
+    eq(L.BANK_KEYS, ["A", "B", "C", "D"]);
+    forBanks((k, b) => { eq(Object.keys(b.questions).sort(), Object.keys(C.banks.A.questions).sort(), k + " 題目清單"); QIDS.forEach((q) => eq(b.questions[q].kind, C.banks.A.questions[q].kind, k + "/" + q + " 題型")); });
+  });
+  T("T13-2 每套每題只有一個正解；選項 4 個（選擇題）；提示 3 層；放行不是正解", () => {
+    forBanks((k) => QIDS.forEach((q) => {
+      const c = C.questions[q]; const n = L.optionIds(q).filter((o) => L.isCorrect(q, o)).length; eq(n, 1, k + "/" + q + " 正解數");
+      eq(c.hints.length, 3, k + "/" + q + " 提示數"); ok(c.prompt.length > 10 && c.learn.length > 10, k + "/" + q + " 文字");
+      if (c.kind === "choice") { eq(c.options.length, 4, k + "/" + q + " 選項數"); c.options.filter((o) => !o.correct).forEach((o) => ok(o.why && o.why.length > 6, k + "/" + q + "/" + o.id + " 缺說明")); }
+      else { ok(!L.isCorrect(q, "release")); ok(c.pick.objs.every((o) => C.objects[o])); c.pick.objs.filter((o) => o !== c.pick.correct).concat(["release"]).forEach((o) => ok(c.pick.why[o], k + "/" + q + " 缺 " + o + " 說明")); }
+    }));
+  });
+  T("T13-3 每套的答錯說明與提示都不洩漏答案用字（切片題的選項本來就是同一組參數的變化，選項文字不檢查）", () => {
+    forBanks((k) => QIDS.forEach((q) => {
+      const keys = C.questions[q].answerKeys;
+      L.optionIds(q).filter((o) => !L.isCorrect(q, o)).forEach((o) => keys.forEach((w) => ok(!L.whyOf(q, o).includes(w), k + "/" + q + "/" + o + " 說明洩漏「" + w + "」")));
+      if (C.questions[q].kind === "choice" && q !== "slice") C.questions[q].options.filter((o) => !o.correct).forEach((o) => keys.forEach((w) => ok(!o.text.includes(w), k + "/" + q + "/" + o.id + " 選項洩漏「" + w + "」")));
+      C.questions[q].hints.forEach((h) => keys.forEach((w) => ok(!h.includes(w), k + "/" + q + " 提示洩漏「" + w + "」")));
+    }));
+  });
+  T("T13-4 每套的檢核讀數：耗材、板子各只有一個異常；環境有異常且平台升不到目標溫度", () => {
+    forBanks((k) => {
+      eq(L.readings("filament").filter((r) => r.abnormal).length, 1, k + " 耗材異常數"); eq(L.readings("plate").filter((r) => r.abnormal).length, 1, k + " 板子異常數");
+      ok(L.readings("env").filter((r) => r.abnormal).length >= 1, k + " 環境異常"); ok(C.env.bedNow < C.env.bedTarget, k + " 平台應升不到目標");
+      const v = Object.values(C.plate.gaps); ok(Math.max.apply(null, v) - Math.min.apply(null, v) <= C.plate.tol, k + " 四角間隙應一致");
+    });
+  });
+  T("T13-5 每套都能完整通關，拿到該組代碼", () => {
+    L.BANK_KEYS.forEach((k) => {
+      const d = drive(withBank(k, 11), T0); d.go({ type: "start" });
+      STEPS.forEach((st, i) => { st.qs.forEach((q) => { d.ok(q); d.end(); }); if (st.gate) { d.go({ type: "startPrint" }); d.end(); } });
+      ok(d.st.completed && d.st.phase === "done", k + " 應完成"); eq(d.go({ type: "showSuccess" }).success.code, C.groupCodes[0]);
+    }); L.useBank("A");
+  });
+  T("T13-6 每套的答錯：只有該套的正解會前進（窮舉每個選項）", () => {
+    L.BANK_KEYS.forEach((k) => {
+      QIDS.forEach((q) => {
+        const stepIdx = L.consts.stepOfQ[q]; L.useBank(k);
+        const d = drive(withBank(k, 11), T0); d.go({ type: "start" });
+        for (let i = 0; i < stepIdx; i++) { STEPS[i].qs.forEach((x) => { d.ok(x); d.end(); }); if (STEPS[i].gate) { d.go({ type: "startPrint" }); d.end(); } }
+        L.optionIds(q).filter((o) => !L.isCorrect(q, o)).forEach((o) => { const fb = d.go({ type: "answer", qid: q, option: o }); eq(fb.kind, "wrong", k + "/" + q + "/" + o); ok(!d.st.done[q]); });
+      });
+    }); L.useBank("A");
+  });
+  T("T13-7 抽題庫：同一種子結果固定；重來不會連續抽到同一套；各套都有機會抽到", () => {
+    eq(L.initial(1, 5).bank, L.initial(1, 5).bank); const seen = new Set();
+    for (let sd = 1; sd <= 200; sd++) { const s0 = L.initial(1, sd); seen.add(s0.bank); const r = L.reduce(s0, { type: "reset", pin: C.masterPin, seed: sd + 1000 }, T0).state; ok(r.bank !== s0.bank, "重來抽到同一套 " + sd); }
+    eq(Array.from(seen).sort(), L.BANK_KEYS); L.useBank("A");
+  });
+  T("T13-8 存檔還原：題庫保留；亂改題庫代號的存檔無效；舊存檔（沒有題庫欄位）依種子補上", () => {
+    L.BANK_KEYS.forEach((k) => { const s = withBank(k, 21); const r = L.restore(L.serialize(s), T0, 5); eq(r.bank, k); });
+    const bad = JSON.parse(L.serialize(withBank("B", 21))); bad.bank = "Z"; eq(JSON.stringify(L.restore(JSON.stringify(bad), T0, 5)), JSON.stringify(L.initial(1, 5)));
+    const old = JSON.parse(L.serialize(withBank("B", 21))); delete old.bank; eq(L.restore(JSON.stringify(old), T0, 5).bank, L.initial(1, 21).bank); L.useBank("A");
+  });
+  T("T13-9 換題庫後，檢核的數字跟著換（題目與畫面讀數一致）", () => {
+    const e = new Set(); forBanks((k) => e.add(JSON.stringify([C.env, C.fila, C.plate]))); eq(e.size, 4);
+    forBanks((k) => { L.readings("filament").forEach((r) => ok(r.value.length > 0)); });
+  });
+
   /* ---------- 執行與顯示 ---------- */
   function run() {
-    return list.map((t) => { try { t.fn(); return { name: t.name, pass: true }; } catch (e) { return { name: t.name, pass: false, err: String((e && e.message) || e) }; } });
+    return list.map((t) => { L.useBank("A"); try { t.fn(); return { name: t.name, pass: true }; } catch (e) { return { name: t.name, pass: false, err: String((e && e.message) || e) }; } });
   }
   function render(root) {
     const res = run(); const bad = res.filter((r) => !r.pass).length;
@@ -1371,11 +1649,12 @@ const Stage = (() => {
   function render(R, S, o) {
     o = o || {}; const clk = o.clk || 0, printing = !!o.printing;
     const E = CONFIG.env, p = S.print, lvl = S.level;
+    const thB = R.root.querySelector(".thermo .th b"); if (thB && thB.textContent !== E.room + "℃") thB.textContent = E.room + "℃";
     const warm = S.warm;
     /* 平台傾斜（不平）與溫度 */
     const tilt = (1 - lvl) * 3.2;
     R.bedG.style.transform = "translate3d(0px,0px," + (printing ? Math.sin(clk * 6) * 7 : 0).toFixed(2) + "px) rotateX(" + (-tilt).toFixed(2) + "deg) rotateZ(" + (tilt * 0.7).toFixed(2) + "deg)";
-    const bedT = p >= 1 && S.lift >= 0 ? 30 + 30 * S.bedHeat : (warm >= 1 ? 38 + 22 * S.bedHeat : E.bedNow);
+    const bedT = p >= 1 && S.lift >= 0 ? 30 + 30 * S.bedHeat : (warm >= 1 ? E.bedNow + (60 - E.bedNow) * S.bedHeat : E.bedNow);
     const heat = clamp((bedT - E.room) / (E.bedTarget - E.room), 0, 1);
     R.bed.el.style.setProperty("--c", mixHex("#4a5b7a", "#ff8a1f", heat * 0.85));
     const nozT = p >= 1 ? 25 + 175 * S.bedHeat : 25 + 175 * seg(S.feed, 0, 0.5);
@@ -1522,7 +1801,7 @@ const Stage = (() => {
   let ls = null; try { ls = window.localStorage; ls.setItem("__t", "1"); ls.removeItem("__t"); } catch (e) { ls = null; }
   const store = L.makeStore(ls, C.storageKey);
   const newSeed = () => Math.floor(Math.random() * 4294967294) + 1;
-  let state = L.restore(store.get(), Date.now(), newSeed());
+  let state = L.restore(store.get(), Date.now(), newSeed()); L.useBank(state.bank);
   let msgs = {}, picked = {}, learn = null, anim = null, focusQ = null, hintPhaseKey = "", R = null, linkMsg = null, idleTimer = 0, stageHost = null;
   const persist = () => store.set(L.serialize(state));
 
@@ -1795,10 +2074,10 @@ const Stage = (() => {
     const doUnlock = () => { const fb = dispatch({ type: "unlock", pin }, true); if (fb.ok) { toast("已解鎖，可以繼續", "good"); closeOverlay(); render(); } };
     const doReset = () => {
       const fb = dispatch({ type: "reset", pin, group: g, seed: newSeed() }, true);
-      if (fb.ok) { store.del(); persist(); msgs = {}; picked = {}; learn = null; anim = null; focusQ = null; linkMsg = null; hintPhaseKey = ""; closeOverlay(); hideHint(); render(); Stage.focus(R, camKey(), true); toast("已重來，換第 " + state.group + " 組", "good"); }
+      if (fb.ok) { store.del(); persist(); msgs = {}; picked = {}; learn = null; anim = null; focusQ = null; linkMsg = null; hintPhaseKey = ""; closeOverlay(); hideHint(); render(); Stage.focus(R, camKey(), true); toast("已重來，換第 " + state.group + " 組、題庫 " + CONFIG.banks[state.bank].label, "good"); }
     };
     o.replaceChildren(el("div", { class: "box" }, el("h2", {}, "關主面板"),
-      el("p", { class: "sub" }, "目前：第 " + state.group + " 組 · 答錯 " + state.failCount + " 次 · 提示 " + state.hintsUsed + " 次" + (state.locked ? " · 已鎖機" : "") + (state.completed ? " · 已完成" : "")),
+      el("p", { class: "sub" }, "目前：第 " + state.group + " 組 · 題庫 " + CONFIG.banks[state.bank].label + " · 答錯 " + state.failCount + " 次 · 提示 " + state.hintsUsed + " 次" + (state.locked ? " · 已鎖機" : "") + (state.completed ? " · 已完成" : "")),
       state.locked ? el("button", { class: "btn big green", onclick: doUnlock }, "解鎖機器（讓這組繼續）") : null,
       el("hr", { style: "border-color:var(--line);margin:14px 0" }),
       el("b", {}, "重來，並換到下一組"), el("div", { class: "stepper" }, el("button", { onclick: () => step(-1) }, "−"), out, el("button", { onclick: () => step(1) }, "＋")), codeLine,
@@ -1813,6 +2092,9 @@ const Stage = (() => {
     $("#brandT").textContent = C.title; $("#brandS").textContent = C.subtitle;
     $("#hintbtn").addEventListener("click", onHint);
     makeHold($("#gear")); makeHold($("#lockhold"));
+    /* 從第一關按「前往第二關」進來時，網址會帶 #code=密碼，自動確認 */
+    try { const m = /[#?&]code=(\d{3})/.exec(location.hash + location.search);
+      if (m && state.phase === "intro" && !state.linked) { const fb = dispatch({ type: "link", code: m[1] }, true); linkMsg = fb.ok ? { text: C.story.linkOk + "（已從第一關帶入第 " + fb.group + " 組）", kind: "good" } : { text: "網址帶來的密碼不是第一關的代碼，請在下面重新輸入。", kind: "bad" }; } } catch (e) {}
     render();
     setInterval(updateBtns, 250);
     /* 閒置時讓冷風、公仔慢慢動；動畫播放中、或使用者設定減少動態時不跑 */

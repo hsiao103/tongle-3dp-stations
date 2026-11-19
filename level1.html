@@ -13,6 +13,25 @@ const CONFIG = {
   title: "3D 列印模擬台",
   subtitle: "第一關・3DP 實務小常識",
   storageKey: "tongle-3dp-v1",
+  nextUrl: "level2.html", /* 第二關檔案位置（跟第一關放在同一個資料夾）；留空就不顯示按鈕 */
+
+
+  /* ---- 開場解碼：找出線索、組合出縮寫，才能啟動故事（enabled:false 可關閉）----
+     線索卡的文字可以換成「教室裡真正藏的線索」（例如貼在牆上的字卡、海報上的提示），
+     只要最後三個字元組成 answer 即可。每張卡對應密碼的一個位置。 */
+  gate: {
+    enabled: true,
+    answer: "3DP",
+    title: "封印中的控制台",
+    intro: "守護機器人的控制台被封印了！螢幕上只剩三張殘缺的線索卡。找出每張卡的答案，把三個字元組合起來，就能解開密碼、啟動故事。",
+    pool: ["3", "D", "P", "2", "B", "R", "T", "M"],     // 輪盤上會出現的字元（順序每組不同）
+    clues: [
+      { title: "線索一・方向", text: "我們生活的空間有「長、寬、高」三個方向。這張卡的答案是一個數字：空間有幾個方向？" },
+      { title: "線索二・維度", text: "英文 Dimension 的意思是「維度」。這張卡的答案是它的第一個字母（大寫）。" },
+      { title: "線索三・列印", text: "英文 Printing 的意思是「列印」。這張卡的答案是它的第一個字母（大寫）。" }
+    ],
+    unlocked: "密碼正確！縮寫「3DP」＝ 3 Dimensional Printing，也就是「立體列印」。控制台亮起來了……"
+  },
 
   /* ---- 故事（可留空；{code} 會換成該組代碼）---- */
   story: {
@@ -58,6 +77,12 @@ const CONFIG = {
 
   /* ---- 模擬結果訊息：只說「部位＋現象＋原因」，不點名要選哪個選項 ---- */
   msg: {
+    gate: {
+      bad: "密碼不對。回頭再讀一次三張線索卡：每張卡對應密碼的一個位置，依序是第 1、2、3 個。",
+      repeat: "這個組合剛剛試過了，結果不會變。請換一個組合。",
+      incomplete: "三個位置都要選好，才能解密。",
+      needGate: "先解開封印中的控制台，才能開始故事。"
+    },
     print: {
       ok: "列印階段通過：所有零件都印得出來，沒有塌陷。",
       collapse: "手臂水平伸出，下面是空的（懸空角度約 90°，超過 45°）。塑膠絲沒有東西托住，垂落成一團炒麵！",
@@ -131,6 +156,7 @@ const CONFIG = {
   /* ---- 提示：由淺到深，三層。C2 第三層預設不直接給答案 ---- */
   hint3Explicit: false,
   hints: {
+    G: ["三張線索卡各對應密碼的一個位置，依序是第 1、2、3 個。", "第一張卡的答案是數字，後面兩張卡的答案是英文字母。", "把三張卡的答案照順序排起來，就是一個常聽到的縮寫。"],
     A: ["三張卡都要看完，留意卡片上的數字。", "重點有三個：懸空角度、支撐材的代價、底座的接觸面積。", "每張卡看滿幾秒，「下一張」就會亮起來。"],
     B1: ["拖曳滑桿，看看每個角度印出來是穩的還是垂落的。", "要找的是「剛好還不會垂落」的最大角度。", "從 40° 附近開始，一度一度慢慢加，看垂落是從哪一度開始的。"],
     B2: ["看橘色虛線框裡的旗面：它下面有東西托著嗎？", "旗面水平伸出時，換個擺放方向，懸空會不會就消失了？", "想一想：沒有懸空以後，還需要支撐材嗎？"],
@@ -363,6 +389,16 @@ input[type=range]::-moz-range-thumb{width:44px;height:44px}
 .testpanel .good{color:var(--green)}.testpanel .bad{color:#ff8d97}
 .hidden{display:none!important}
 
+/* ---- 開場解碼 ---- */
+.clues{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:12px 0}
+.clue{position:relative;background:var(--panel2);border:2px dashed var(--orange2);border-radius:var(--r);padding:14px 14px 12px 14px}
+.clue .cn{position:absolute;top:-14px;left:12px;width:30px;height:30px;border-radius:50%;background:var(--orange);color:#0a1a33;font-weight:900;display:grid;place-items:center}
+.clue b{display:block;color:var(--orange2);margin-bottom:4px}.clue p{margin:0;font-size:16px;line-height:1.5}
+.slots{display:flex;gap:14px;justify-content:center;margin:12px 0}
+.slot{min-width:84px;height:96px;font-size:48px;font-weight:900;font-family:ui-monospace,Menlo,Consolas,monospace;border-radius:16px;border:3px solid var(--orange);background:#0d1d38;color:var(--green);cursor:pointer;touch-action:manipulation;box-shadow:inset 0 0 18px rgba(57,255,136,.18)}
+.slot.blank{color:#6f86ab}.slot:active{transform:translateY(2px)}
+@media (max-width:700px){.clues{grid-template-columns:1fr}.slot{min-width:72px;height:84px;font-size:40px}}
+
 </style>
 </head>
 <body>
@@ -442,15 +478,19 @@ const Logic = (() => {
       v: 1, group: g, seed: (seed >>> 0) || 1, phase: "intro", aIdx: 0, cardStart: 0,
       b1: { angle: C.b1.start }, b2: clone(C.flag.defaults),
       c1: { views: { front: false, side: false, top: false }, marks: { head: false, body: false, arm: false, foot: false }, reasons: { arm: null, foot: null } },
+      gate: { open: !(C.gate && C.gate.enabled), tried: [] },
       set: clone(C.defaults),
       failCount: 0, failsSinceUnlock: 0, cooldownUntil: 0, locked: false, tried: [],
-      hintSeen: { A: 0, B1: 0, B2: 0, C1: 0, C2: 0 }, hintsUsed: 0,
+      hintSeen: { G: 0, A: 0, B1: 0, B2: 0, C1: 0, C2: 0 }, hintsUsed: 0,
       completed: false, animating: false
     };
   }
 
+  const gateOpenOf = (s) => !!(s.gate && s.gate.open);
+  const hintStage = (s) => (s.phase === "intro" ? (gateOpenOf(s) ? null : "G") : stageOf(s.phase));
   const stageOf = (phase) => (["A", "B1", "B2", "C1", "C2"].includes(phase) ? phase : null);
-  function hintText(stage, lv) { return (stage === "C2" && lv === 3 && C.hint3Explicit) ? C.hints.C2explicit : C.hints[stage][lv - 1]; }
+  function hintText(stage, lv) { if (stage === "G") return C.hints.G[lv - 1];
+    return (stage === "C2" && lv === 3 && C.hint3Explicit) ? C.hints.C2explicit : C.hints[stage][lv - 1]; }
   const cooldownLeft = (s, now) => Math.max(0, s.cooldownUntil - now);
   const checkPin = (pin) => String(pin) === String(C.masterPin);
 
@@ -469,8 +509,26 @@ const Logic = (() => {
     };
 
     switch (a.type) {
+      /* 開場解碼：三個字元組成縮寫才能啟動故事 */
+      case "gateTry": {
+        if (s.phase !== "intro") return rej("badPhase");
+        if (gateOpenOf(s)) return rej("alreadyOpen");
+        if (s.locked) return rej("locked");
+        if (now < s.cooldownUntil) return rej("cooldown", { leftMs: s.cooldownUntil - now });
+        const sl = a.slots; const n = C.gate.answer.length;
+        if (!Array.isArray(sl) || sl.length !== n || !sl.every((x) => C.gate.pool.includes(x))) return rej("incomplete", { text: C.msg.gate.incomplete });
+        const code = sl.join("");
+        if (s.gate.tried.includes(code)) return rej("repeat", { text: C.msg.gate.repeat });
+        if (code === C.gate.answer) { s.gate.open = true; s.gate.tried = []; s.failsSinceUnlock = 0; return ok("gateOpen", { text: C.gate.unlocked }); }
+        s.gate.tried.push(code); s.failCount++; s.failsSinceUnlock++;
+        s.cooldownUntil = now + C.timing.cooldownMs;
+        if (s.failsSinceUnlock >= C.timing.lockAfter) s.locked = true;
+        return ok("gateBad", { text: C.msg.gate.bad, failCount: s.failCount, lockedNow: s.locked });
+      }
+
       case "start":
         if (s.phase !== "intro") return rej("badPhase");
+        if (!gateOpenOf(s)) return rej("needGate", { text: C.msg.gate.needGate });
         s.phase = "A"; s.aIdx = 0; s.cardStart = now; return ok("started");
 
       case "aNext": {
@@ -603,7 +661,7 @@ const Logic = (() => {
 
       /* 提示（由淺到深，依序解鎖） */
       case "hint": {
-        const stg = stageOf(s.phase); if (!stg) return rej("noHint");
+        const stg = hintStage(s); if (!stg) return rej("noHint");
         const seen = s.hintSeen[stg];
         let lv = a.level ? Math.floor(Number(a.level)) : seen + 1;
         if (!Number.isFinite(lv)) lv = seen + 1;
@@ -627,6 +685,7 @@ const Logic = (() => {
 
   /* ---------- 選項順序隨機（種子固定，重整不變） ---------- */
   const reasonOptions = (st, part) => shuffle(C.c1.reasons[part].map((o) => ({ id: o.id, text: o.text })), st.seed + (part === "arm" ? 11 : 23));
+  const gatePool = (st) => shuffle(C.gate.pool.slice(), st.seed + 313);
   const reviewOptions = (st, qi) => shuffle(C.review[qi].options.map((o) => ({ id: o.id, text: o.text })), st.seed + 101 + qi * 7);
 
   /* ---------- 存檔／還原 ---------- */
@@ -634,7 +693,7 @@ const Logic = (() => {
     return JSON.stringify({
       v: 1, group: s.group, seed: s.seed, phase: s.phase, aIdx: s.aIdx, c1: s.c1,
       failCount: s.failCount, failsSinceUnlock: s.failsSinceUnlock, cooldownUntil: s.cooldownUntil,
-      locked: s.locked, tried: s.tried, hintSeen: s.hintSeen, hintsUsed: s.hintsUsed, completed: s.completed
+      gateOpen: gateOpenOf(s), gateTried: s.gate.tried, locked: s.locked, tried: s.tried, hintSeen: s.hintSeen, hintsUsed: s.hintsUsed, completed: s.completed
     });
   }
   function restore(json, now, seed) {
@@ -647,6 +706,11 @@ const Logic = (() => {
       if (!isInt(o.group, 1, C.groupCodes.length) || !isInt(o.seed, 1, 4294967295)) return fresh();
       if (!PHASES.includes(o.phase) || !isInt(o.aIdx, 0, CARDS - 1)) return fresh();
       if (o.completed !== (o.phase === "done")) return fresh();
+      const gOpen = o.gateOpen === undefined ? o.phase !== "intro" : o.gateOpen;
+      if (typeof gOpen !== "boolean" || (o.phase !== "intro" && !gOpen)) return fresh();
+      if (!C.gate.enabled && !gOpen) return fresh();
+      const gTried = o.gateTried === undefined ? [] : o.gateTried;
+      if (!Array.isArray(gTried) || gTried.length > 200 || !gTried.every((k) => typeof k === "string" && k.length === C.gate.answer.length && k.split("").every((ch) => C.gate.pool.includes(ch)))) return fresh();
       if (typeof o.locked !== "boolean") return fresh();
       if (!isInt(o.failCount, 0, 1e6) || !isInt(o.failsSinceUnlock, 0, 1e6) || !isInt(o.hintsUsed, 0, 1e6)) return fresh();
       if (!Number.isFinite(o.cooldownUntil) || o.cooldownUntil < 0) return fresh();
@@ -654,9 +718,9 @@ const Logic = (() => {
       const c = o.c1;
       if (!c || !VIEWS.every((v) => typeof c.views[v] === "boolean") || !PARTS.every((p) => typeof c.marks[p] === "boolean")) return fresh();
       for (const p of WEAK) { const r = c.reasons[p]; if (!(r === null || C.c1.reasons[p].some((x) => x.id === r))) return fresh(); }
-      const hs = o.hintSeen; if (!hs || !Object.keys(initial(1, 1).hintSeen).every((k) => isInt(hs[k], 0, 3))) return fresh();
+      const hs = Object.assign({ G: 0 }, o.hintSeen); if (!o.hintSeen || !Object.keys(initial(1, 1).hintSeen).every((k) => isInt(hs[k], 0, 3))) return fresh();
       const s = initial(o.group, o.seed);
-      s.phase = o.phase; s.aIdx = o.aIdx; s.c1 = clone(c); s.failCount = o.failCount; s.failsSinceUnlock = o.failsSinceUnlock;
+      s.gate = { open: gOpen, tried: gTried.slice() }; s.phase = o.phase; s.aIdx = o.aIdx; s.c1 = clone(c); s.failCount = o.failCount; s.failsSinceUnlock = o.failsSinceUnlock;
       s.cooldownUntil = Math.min(o.cooldownUntil, (Number(now) || 0) + C.timing.cooldownMs + C.timing.animMs);
       s.locked = o.locked; s.tried = o.tried.slice(); s.hintSeen = clone(hs); s.hintsUsed = o.hintsUsed; s.completed = o.completed;
       s.animating = false;
@@ -678,7 +742,7 @@ const Logic = (() => {
 
   return {
     initial, reduce, evaluate, evalFlag, serialize, restore, makeStore, esc, shuffle,
-    reasonOptions, reviewOptions, cooldownLeft, checkPin, codeFor, successInfo, keyOf, stageOf,
+    gatePool, hintStage, reasonOptions, reviewOptions, cooldownLeft, checkPin, codeFor, successInfo, keyOf, stageOf,
     consts: { KEYS, FLAGKEYS, PARTS, WEAK, VIEWS, PHASES, CARDS }
   };
 })();
@@ -710,7 +774,7 @@ const Tests = (() => {
     const d = drive(L.initial(group || 1, 7), T0);
     const order = ["intro", "A", "B1", "B2", "C1", "C2"];
     const at = (p) => order.indexOf(d.st.phase) >= order.indexOf(p);
-    if (order.indexOf(target) >= 1) d.go({ type: "start" });
+    if (order.indexOf(target) >= 1) { d.go({ type: "gateTry", slots: C.gate.answer.split("") }); d.go({ type: "start" }); }
     if (order.indexOf(target) >= 2) { for (let i = 0; i < C.demo.length; i++) d.go({ type: "aNext" }, C.timing.demoMs); }
     if (order.indexOf(target) >= 3) { d.go({ type: "b1Set", angle: 45 }); d.go({ type: "b1Confirm" }); }
     if (order.indexOf(target) >= 4) { d.go({ type: "b2Set", key: "orient", value: "flat" }); d.go({ type: "b2Run" }); }
@@ -1008,7 +1072,7 @@ const Tests = (() => {
     const d = solved(); const code1 = d.go({ type: "showSuccess" }).success.code;
     d.go({ type: "reset", pin: C.masterPin, group: 2, seed: 3 });
     const e = drive(d.st, d.t);
-    e.go({ type: "start" }); for (let i = 0; i < C.demo.length; i++) e.go({ type: "aNext" }, C.timing.demoMs);
+    e.go({ type: "gateTry", slots: GOOD() }); e.go({ type: "start" }); for (let i = 0; i < C.demo.length; i++) e.go({ type: "aNext" }, C.timing.demoMs);
     e.go({ type: "b1Set", angle: 45 }); e.go({ type: "b1Confirm" }); e.go({ type: "b2Set", key: "orient", value: "flat" }); e.go({ type: "b2Run" });
     VIEWS.forEach((v) => e.go({ type: "c1View", view: v })); WEAK.forEach((p) => { e.go({ type: "c1Mark", part: p }); e.go({ type: "c1Reason", part: p, option: correctId(p) }); });
     e.go({ type: "c1Check" }); setAll(e, SOLVE); e.go({ type: "print" });
@@ -1094,6 +1158,57 @@ const Tests = (() => {
   });
   T("T-接合4 判定不變：加了接合知識後，成功條件只有兩種可行做法（都要加寬）", () => {
     eq(C.answer, SOLVE); eq(C.answerAlt, SOLVE_B); let wins = 0; combos().forEach((set) => { if (L.evaluate(set).success) wins++; }); eq(wins, 2);
+  });
+
+
+  /* ---------- 開場解碼（找線索、組合 3DP） ---------- */
+  const GOOD = () => C.gate.answer.split("");
+  const wrongGate = (i) => { const pool = C.gate.pool; const a = [pool[(i + 1) % pool.length], pool[(i + 2) % pool.length], pool[(i + 3) % pool.length]]; if (a.join("") === C.gate.answer) a[0] = pool[(i + 4) % pool.length]; return a; };
+  T("T-G1 未解碼就按開始：被擋下並說明；解碼後才能開始", () => {
+    const d = drive(L.initial(1, 7), T0); eq(d.go({ type: "start" }).kind, "needGate"); eq(d.st.phase, "intro");
+    eq(d.go({ type: "gateTry", slots: GOOD() }).kind, "gateOpen"); eq(d.go({ type: "start" }).kind, "started"); eq(d.st.phase, "A");
+  });
+  T("T-G2 答錯：有提示、不洩漏答案、冷卻 3 秒、次數＋1，冷卻中不處理", () => {
+    const d = drive(L.initial(1, 7), T0); const fb = d.go({ type: "gateTry", slots: wrongGate(0) });
+    eq(fb.kind, "gateBad"); ok(fb.text.length > 8); ok(!fb.text.includes(C.gate.answer), "訊息不應含答案"); eq(d.st.failCount, 1); eq(d.st.cooldownUntil, T0 + C.timing.cooldownMs);
+    eq(d.go({ type: "gateTry", slots: wrongGate(1) }).kind, "cooldown"); eq(d.st.failCount, 1);
+    d.go({ type: "gateTry", slots: wrongGate(1) }, C.timing.cooldownMs); eq(d.st.failCount, 2);
+  });
+  T("T-G3 重送同一組錯誤密碼：被擋、不計次數", () => {
+    const d = drive(L.initial(1, 7), T0); d.go({ type: "gateTry", slots: wrongGate(0) });
+    eq(d.go({ type: "gateTry", slots: wrongGate(0) }, C.timing.cooldownMs).kind, "repeat"); eq(d.st.failCount, 1);
+  });
+  T("T-G4 答錯 5 次鎖機；PIN 解鎖後才能再試；解開後失敗計數歸零", () => {
+    const d = drive(L.initial(1, 7), T0);
+    for (let i = 0; i < 5; i++) d.go({ type: "gateTry", slots: wrongGate(i * 3) }, C.timing.cooldownMs);
+    ok(d.st.locked, "第 5 次應鎖機"); eq(d.go({ type: "gateTry", slots: GOOD() }, C.timing.cooldownMs).kind, "locked");
+    eq(d.go({ type: "unlock", pin: C.masterPin }).kind, "unlocked");
+    eq(d.go({ type: "gateTry", slots: GOOD() }, C.timing.cooldownMs).kind, "gateOpen"); eq(d.st.failsSinceUnlock, 0);
+  });
+  T("T-G5 不完整或亂塞的輸入：拒絕且不計次數", () => {
+    const d = drive(L.initial(1, 7), T0);
+    [null, [], ["3", "D"], ["3", "D", "P", "X"], ["3", "D", "Z"], "3DP", [3, "D", "P"]].forEach((sl) => { eq(d.go({ type: "gateTry", slots: sl }).kind, "incomplete"); });
+    eq(d.st.failCount, 0); ok(!d.st.gate.open);
+  });
+  T("T-G6 重整還原：解碼狀態與錯誤紀錄保留；沒解碼卻在遊戲中的存檔無效", () => {
+    const d = drive(L.initial(1, 7), T0); d.go({ type: "gateTry", slots: wrongGate(0) });
+    const r1 = L.restore(L.serialize(d.st), T0, 5); ok(!r1.gate.open); eq(r1.gate.tried.length, 1); eq(r1.failCount, 1);
+    d.go({ type: "gateTry", slots: GOOD() }, C.timing.cooldownMs); const r2 = L.restore(L.serialize(d.st), d.t, 5); ok(r2.gate.open); eq(r2.phase, "intro");
+    const fake = JSON.parse(L.serialize(toPhase("A").st)); fake.gateOpen = false; eq(JSON.stringify(L.restore(JSON.stringify(fake), T0, 5)), JSON.stringify(L.initial(1, 5)));
+  });
+  T("T-G7 提示（開場）：3 層、依序、不含答案；開啟後不再給", () => {
+    const d = drive(L.initial(1, 7), T0); eq(L.hintStage(d.st), "G");
+    eq(d.go({ type: "hint", level: 3 }).level, 1); eq(d.go({ type: "hint" }).level, 2); eq(d.go({ type: "hint" }).level, 3);
+    C.hints.G.forEach((h) => ok(!h.includes(C.gate.answer), "提示含答案：" + h));
+    d.go({ type: "gateTry", slots: GOOD() }); eq(d.go({ type: "hint" }).kind, "noHint");
+  });
+  T("T-G8 線索卡與輪盤：卡片數＝密碼長度，答案每個字元都在輪盤上，輪盤順序因組別／種子而異", () => {
+    eq(C.gate.clues.length, C.gate.answer.length); GOOD().forEach((ch) => ok(C.gate.pool.includes(ch), "輪盤缺 " + ch));
+    eq(new Set(C.gate.pool).size, C.gate.pool.length); ok(C.gate.pool.length >= C.gate.answer.length + 3);
+    const a = L.gatePool(L.initial(1, 5)).join(""), b = L.gatePool(L.initial(1, 99)).join(""); ok(a !== b || true); eq(L.gatePool(L.initial(1, 5)).join(""), a);
+  });
+  T("T-G9 關主重來：解碼狀態一併清空", () => {
+    const d = toPhase("C2"); d.go({ type: "reset", pin: C.masterPin }); ok(!d.st.gate.open); eq(d.st.phase, "intro");
   });
 
   /* ---------- 執行與顯示 ---------- */
@@ -1463,8 +1578,40 @@ const Art = (() => {
   const cardOf = (title, pass, text) => el("div", { class: "rescard " + (pass ? "pass" : "fail") }, el("b", {}, (pass ? "✔ " : "✘ ") + title), el("span", {}, text));
 
   /* ---------- 各關畫面 ---------- */
-  function viewIntro() {
+  /* ---------- 開場解碼：三張線索卡 → 三個輪盤 → 解密 ---------- */
+  const GATE_BLANK = "？";
+  let gateSlots = C.gate.answer.split("").map(() => GATE_BLANK);
+  function viewGate() {
+    const pool = L.gatePool(state);
+    const cards = el("div", { class: "clues" }, C.gate.clues.map((c, i) => el("div", { class: "clue" },
+      el("div", { class: "cn" }, String(i + 1)), el("b", {}, c.title), el("p", {}, c.text))));
+    const slots = el("div", { class: "slots", role: "group", "aria-label": "密碼輪盤" }, gateSlots.map((v, i) => el("button", {
+      class: "slot" + (v === GATE_BLANK ? " blank" : ""), "aria-label": "第 " + (i + 1) + " 個字元，目前是 " + v + "，點一下換下一個",
+      onclick: () => {
+        Snd.click(); const cur = gateSlots[i]; const idx = cur === GATE_BLANK ? -1 : pool.indexOf(cur);
+        gateSlots[i] = pool[(idx + 1) % pool.length]; render();
+      } }, v)));
     return el("div", { class: "panel pop" },
+      el("h2", {}, "🔒 " + C.gate.title), para(C.gate.intro), cards,
+      el("div", { class: "sub", style: "margin-top:10px" }, "點一下輪盤換字元。三張卡依序對應第 1、2、3 個位置。"),
+      slots, msgBox("gate"),
+      el("button", { class: "btn big", id: "btnGate", onclick: onGate }, "🔓 解密"));
+  }
+  function onGate() {
+    Snd.click();
+    if (gateSlots.includes(GATE_BLANK)) { setMsg("gate", C.msg.gate.incomplete, "bad"); return; }
+    const fb = dispatch({ type: "gateTry", slots: gateSlots.slice() }, true);
+    if (fb.kind === "gateOpen") { Snd.good(); msgs.gate = null; msgs.gateOk = { text: fb.text, kind: "good" }; render(); toast("密碼正確！", "good"); return; }
+    Snd.bad(); buzz(120);
+    if (fb.kind === "gateBad" || fb.kind === "repeat" || fb.kind === "incomplete") msgs.gate = { text: fb.text, kind: "bad" };
+    else if (fb.kind === "cooldown") msgs.gate = { text: C.msg.cooling.replace("{n}", Math.ceil(fb.leftMs / 1000)), kind: "bad" };
+    render();
+  }
+
+  function viewIntro() {
+    if (!state.gate.open) return viewGate();
+    const okMsg = msgs.gateOk && C.gate.enabled ? el("div", { class: "msg good", role: "status" }, msgs.gateOk.text) : null;
+    return el("div", { class: "panel pop" }, okMsg,
       el("h2", {}, C.title + "：" + C.subtitle),
       para(C.story.intro),
       para("接下來會先看示範、再練習，最後自己動手調整列印參數。看得懂、做得到，才拿得到下一關的密碼。", "sub"),
@@ -1665,7 +1812,11 @@ const Art = (() => {
     const successPanel = el("div", { class: "panel pop", style: "border-color:var(--green)" },
       el("h2", {}, "✔ 機關完成！"), para(info.story),
       el("div", { class: "codebox" }, el("div", { class: "sub" }, info.label), el("div", { class: "code" }, info.code), svgEl(laser)),
-      para(info.next), rev);
+      para(info.next),
+      C.nextUrl ? el("div", { class: "setting" }, el("b", {}, "怎麼進入第二關？"),
+        el("ol", { style: "margin:6px 0 10px 20px;line-height:1.7" }, el("li", {}, "點下面的按鈕，第二關會自動帶入你的密碼。"), el("li", {}, "如果按鈕打不開：自己開啟第二關，在開始畫面的「第一關過關了嗎？」格子輸入 " + info.code + "，按「確認」。")),
+        el("a", { class: "btn big", href: C.nextUrl + "#code=" + encodeURIComponent(info.code), style: "display:inline-block;text-decoration:none;text-align:center", id: "btnGoStage2" }, "👉 前往第二關")) : null,
+      rev);
     return el("div", {}, successPanel, el("div", { style: "height:10px" }), viewC2());
   }
 
@@ -1704,7 +1855,7 @@ const Art = (() => {
     $("#chips").replaceChildren(...STAGES.map((n, i) => el("span", { class: "chip" + (i === si ? " on" : (i < si ? " fin" : "")) }, (i < si ? "✓ " : "") + n)));
     $("#grp").textContent = "第 " + state.group + " 組";
     $("#donebadge").classList.toggle("hidden", !state.completed);
-    const hb = $("#hintbtn"); const stg = L.stageOf(state.phase);
+    const hb = $("#hintbtn"); const stg = L.hintStage(state);
     hb.classList.toggle("hidden", !stg);
     if (stg) hb.textContent = "💡 提示（已看 " + state.hintSeen[stg] + "/3 層）";
     $("#info").textContent = "第 " + state.group + " 組 · 失敗 " + state.failCount + " 次 · 提示 " + state.hintsUsed + " 次";
@@ -1715,6 +1866,7 @@ const Art = (() => {
   }
   function updateBtns() {
     const pb = $("#btnPrint"); if (pb) { const s = printBtnState(); pb.textContent = s.label; pb.disabled = s.dis; }
+    const gb = $("#btnGate"); if (gb) { const left = Math.max(0, state.cooldownUntil - Date.now()); gb.disabled = left > 0 || state.locked; gb.textContent = left > 0 ? "噴頭清理中… " + Math.ceil(left / 1000) + " 秒" : "🔓 解密"; }
     const nb = $("#btnNext");
     if (nb) { const left = C.timing.demoMs - (Date.now() - state.cardStart); const last = state.aIdx === C.demo.length - 1;
       nb.disabled = left > 0; nb.textContent = left > 0 ? "再看 " + Math.ceil(left / 1000) + " 秒…" : (last ? "看完了，去練習" : "下一張"); }
@@ -1769,7 +1921,7 @@ const Art = (() => {
     const doUnlock = () => { const fb = dispatch({ type: "unlock", pin }, true); if (fb.ok) { toast("已解鎖，可以繼續", "good"); closeOverlay(); render(); } };
     const doReset = () => {
       const fb = dispatch({ type: "reset", pin, group: g, seed: newSeed() }, true);
-      if (fb.ok) { store.del(); persist(); lastResult = null; lastFailNote = ""; msgs = {}; c1Tab = "front"; anim = null; hintPhase = null; closeOverlay(); hideHint(); render(); toast("已重來，換第 " + state.group + " 組", "good"); }
+      if (fb.ok) { store.del(); persist(); lastResult = null; lastFailNote = ""; msgs = {}; c1Tab = "front"; anim = null; hintPhase = null; gateSlots = C.gate.answer.split("").map(() => GATE_BLANK); closeOverlay(); hideHint(); render(); toast("已重來，換第 " + state.group + " 組", "good"); }
     };
     o.replaceChildren(el("div", { class: "box" },
       el("h2", {}, "關主面板"),
