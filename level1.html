@@ -1,0 +1,1800 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>3D 列印模擬台</title>
+<script id="config">
+/* =====================================================================
+   CONFIG：老師只要改這裡就能換內容，不用動程式
+   ===================================================================== */
+const CONFIG = {
+  title: "3D 列印模擬台",
+  subtitle: "第一關・3DP 實務小常識",
+  storageKey: "tongle-3dp-v1",
+
+  /* ---- 故事（可留空；{code} 會換成該組代碼）---- */
+  story: {
+    intro: "【兩關任務・故事開場】創客教室的「微型守護機器人」在巡邏時摔壞了，工程師只留下原始 3D 設計檔，卻忘了設定正確的列印參數。這次任務一共有兩關：第一關「3DP 實務小常識」——你要操作 3D 列印模擬台，調整出最穩固的列印結構，讓機器人重獲新生；第二關「運作流程」——機器人站起來後，學校要做一批校園形象公仔，你要照真正的工作流程，從生成、備料、切片、檢核一路做到上色。先完成第一關，拿到密碼，才能開啟第二關！",
+    success: "「列印完成！結構強度測試 100% 通過！」隨著機械臂緩緩升起，一隻堅固無比的守護機器人正式誕生。它朝你敬了個禮，胸前的裝甲隨即彈開，露出了工程師藏在裡面的下一關密碼。",
+    next: "拿到密碼「{code}」後，守護機器人說：「校園公仔紀念品要開工了，我這次幫你把流程走一遍！」請把密碼交給關主，前往第二關「運作流程」；到那裡可以輸入這組密碼，讓機器人繼續陪你。"
+  },
+
+  /* ---- 每組不同的過關代碼：第 N 組用第 N 個（關主在「重來」時選組別）---- */
+  groupCodes: ["450", "405", "540", "504", "045", "054", "451", "415", "541", "514"],
+  codeLabel: "下一關密碼",
+
+  /* ---- 關主 ---- */
+  masterPin: "2468",
+
+  /* ---- 時間與次數 ---- */
+  timing: {
+    demoMs: 3000,      // 示範卡每張至少看這麼久才能按「下一張」
+    cooldownMs: 3000,  // 每次失敗後的噴頭清理冷卻
+    animMs: 5200,      // 列印＋落摔動畫長度
+    lockAfter: 5,      // 累計失敗幾次就鎖機（要關主協助）
+    holdMs: 3000       // 關主按鈕要長按多久
+  },
+
+  /* ---- B1 角度實驗 ---- */
+  b1: { start: 20, max: 90, critical: 45 },
+
+  /* ---- 三視圖上的數據 ---- */
+  robot: { armAngle: 90, footMm: 8, heightMm: 150 },
+
+  /* ---- 答案（成功條件，寫死在判定，這裡供檢查與顯示）---- */
+  answer: { support: "off", arm: "flat", foot: "wide" },      // 做法①：拆下平放（再接合），不開支撐
+  answerAlt: { support: "on", arm: "stand", foot: "wide" },  // 做法②：連著身體接續列印，開支撐
+  defaults: { support: "off", arm: "stand", foot: "thin" },   // 預設＝失敗組合
+  flag: { defaults: { support: "off", orient: "stand" } },    // B2 小旗子的預設（也是失敗組合）
+
+  labels: {
+    support: { title: "支撐材", off: "不使用", on: "使用" },
+    arm: { title: "手臂列印方向", stand: "連著身體接續列印（水平伸出）", flat: "拆下平放（印好再卡榫嵌入或黏合）" },
+    foot: { title: "腳部底座", thin: "細腳", wide: "加寬底座" },
+    orient: { title: "旗面擺放方向", stand: "連著旗桿接續列印（水平伸出）", flat: "拆下平放（印好再卡榫嵌入或黏合）" }
+  },
+
+  /* ---- 模擬結果訊息：只說「部位＋現象＋原因」，不點名要選哪個選項 ---- */
+  msg: {
+    print: {
+      ok: "列印階段通過：所有零件都印得出來，沒有塌陷。",
+      collapse: "手臂水平伸出，下面是空的（懸空角度約 90°，超過 45°）。塑膠絲沒有東西托住，垂落成一團炒麵！",
+      okSupport: "手臂連著身體一起接續列印，懸空的地方靠支撐材撐住，印出來了。這也是可行的做法；代價是多用耗材、拆支撐要小心，手臂底面也會比較粗糙。",
+      supportWaste: "手臂已經平貼在列印板上，下面沒有懸空。支撐材根本用不到，只浪費耗材，拆除時還刮傷表面。"
+    },
+    drop: {
+      ok: "落摔測試通過：機器人穩穩站住，毫髮無傷。",
+      ankleBreak: "落摔測試失敗：腳底接觸面積太小，重心不穩，落地的衝擊全集中在腳踝，腳踝斷了！"
+    },
+    flag: {
+      ok: "小旗子印好了！旗面沒有塌陷。",
+      collapse: "旗面水平伸出，下面是空的，塑膠絲沒有東西托住，垂落成一團炒麵。",
+      okSupport: "旗面連著旗桿一起接續列印，下面用支撐材托住，印出來了。可行；代價是多用耗材，拆支撐要小心。",
+      waste: "旗面已經平貼列印板，下面沒有懸空。支撐材用不到，只是浪費耗材。"
+    },
+    cooling: "噴頭清理中…還要 {n} 秒",
+    lock: "機器暫停：已連續失敗 {n} 次。請先回頭想一想每個弱點為什麼會出問題，並請關主協助。",
+    needTutorial: "先把前面的示範與練習完成，才能使用列印台。",
+    needC1: "先到「三視圖診斷」找出弱點，才能設定列印參數。",
+    repeat: "這組設定剛剛試過了，結果不會變。請先改變至少一項設定。",
+    busy: "模擬進行中，請等動畫結束。"
+  },
+
+  /* ---- A 示範（3 張卡）---- */
+  demo: [
+    { title: "① 懸空角度：45° 是分界", body: "3D 列印是一層一層往上疊。往外伸出的部分，如果和垂直線的夾角超過 45°，下面就沒有東西托住，塑膠絲會垂落。≤45° 可以直接印。把零件換個放法（例如拆下來躺平、另外印），懸空也可能就消失了。" },
+    { title: "② 支撐材：能撐，但有代價", body: "支撐材像鷹架，可以撐住懸空的地方。所以「零件連著身體一起接續列印、再開支撐」是可行的做法，但要付出代價：多用耗材、多花時間、拆除時要小心，貼著支撐的面也會比較粗糙。沒有懸空的地方，就不需要支撐材。" },
+    { title: "③ 底座：接觸面積越大越穩", body: "底部碰到列印板（或地面）的面積太小，就像用一根針站著：容易倒，落地時衝擊也全擠在細細的地方。加寬底座可以把力量分散開。" },
+    { title: "④ 兩種做法：拆開印，或連著印", body: "處理懸空有兩條路：①連著身體接續列印＋開支撐（省去接合，但耗材與後處理較多）；②把零件拆下躺平印、不用支撐，印完再接回身體（省耗材，但要多一道接合）。這裡看第②種：躺平印的零件是「另外印」的，印完要接回身體。常見兩種：卡榫（嵌入）——榫頭插進孔裡，孔要比榫頭多留一點公差，太緊插不進去、太鬆會晃；黏合——用膠把接觸面黏起來，接觸面積越大越牢。接合處本身也是新的弱點，要好好設計。" }
+  ],
+
+  /* ---- B2 小旗子 ---- */
+  b2: {
+    steps: [
+      "步驟 1：看橘色虛線框裡的旗面。它下面有東西托著嗎？",
+      "步驟 2：想一想：換個擺放方向，懸空會不會消失？消失以後還需要支撐材嗎？",
+      "步驟 3：設定好兩個選項，按「開始列印」。"
+    ]
+  },
+
+  /* ---- C1 三視圖診斷 ---- */
+  c1: {
+    viewText: {
+      front: "前視圖：手臂水平伸出，與垂直線的夾角是 90°。",
+      side: "側視圖：機身高 150 mm；腳底接觸圓的直徑只有 8 mm。",
+      top: "俯視圖：虛線小圓是腳底碰到列印板的面積（直徑 8 mm），比整個機身小很多。"
+    },
+    parts: {
+      head: { name: "頭部", whyNot: "頭部是圓頂，每一層都疊在下面一層上，沒有懸空，也不是最先受力的地方。" },
+      body: { name: "身體", whyNot: "身體是實心方塊，底面又寬、每一層都有下層托住，很穩。" },
+      arm: { name: "手臂" },
+      foot: { name: "腳底" }
+    },
+    reasons: {
+      arm: [
+        { id: "a1", text: "手臂水平伸出，下面是空的（懸空角度 90°，超過 45°）", correct: true },
+        { id: "a2", text: "手臂的顏色太淺，印不出來", why: "顏色不影響能不能印出來。重點是每一層下面有沒有東西托住。" },
+        { id: "a3", text: "手臂太重，機器人會站不穩", why: "手臂很輕。要看的是「印的時候」下面有沒有東西托住，不是整體重量。" },
+        { id: "a4", text: "手臂和身體用的是不同材料", why: "整隻機器人用同一種塑膠線材，材料不是問題。" }
+      ],
+      foot: [
+        { id: "f1", text: "腳底接觸面積只有 8 mm，太小，站不穩也承受不住衝擊", correct: true },
+        { id: "f2", text: "腳太長，印太久", why: "印的時間長短不會讓它變得不穩固。" },
+        { id: "f3", text: "腳是懸空的，需要支撐材", why: "腳是直直往上疊的（夾角 0°），沒有懸空。問題在別的地方。" },
+        { id: "f4", text: "腳的顏色和身體不一樣", why: "顏色和結構是否穩固無關。" }
+      ]
+    }
+  },
+
+  /* ---- 提示：由淺到深，三層。C2 第三層預設不直接給答案 ---- */
+  hint3Explicit: false,
+  hints: {
+    A: ["三張卡都要看完，留意卡片上的數字。", "重點有三個：懸空角度、支撐材的代價、底座的接觸面積。", "每張卡看滿幾秒，「下一張」就會亮起來。"],
+    B1: ["拖曳滑桿，看看每個角度印出來是穩的還是垂落的。", "要找的是「剛好還不會垂落」的最大角度。", "從 40° 附近開始，一度一度慢慢加，看垂落是從哪一度開始的。"],
+    B2: ["看橘色虛線框裡的旗面：它下面有東西托著嗎？", "旗面水平伸出時，換個擺放方向，懸空會不會就消失了？", "想一想：沒有懸空以後，還需要支撐材嗎？"],
+    C1: ["三個視圖都要看。前視圖看伸出去的零件，側視圖和俯視圖看最底下的零件。", "對照數字：哪個部位的懸空角度超過 45°？哪個部位的底部接觸面積太小？", "弱點一共有兩處：一處在「伸出去」的零件，一處在「最下面」的零件。"],
+    C2: ["看看模型哪些地方「懸在半空中」，還有哪裡「太細站不穩」？", "處理懸空不只一種辦法；底部接觸面積也有一項可以改。", "兩個弱點都要處理。手臂的懸空有兩種處理思路：讓懸空消失，或讓懸空被托住。想想：手臂換個放法之後，下面還有沒有懸空？沒有的話，支撐材還要不要開？"],
+    C2explicit: "把「腳部底座」改成加寬底座；手臂有兩種可行做法：拆下平放且不開支撐，或連著身體並開啟支撐。"
+  },
+
+  /* ---- 回顧問題（成功後顯示，選做，不影響過關）---- */
+  review: [
+    {
+      q: "為什麼把細長的手臂「平躺」印，會比「站著」印更不容易折斷？",
+      options: [
+        { id: "r1", text: "平躺後有列印板托著，不用支撐材，而且層紋沿著手臂的長度方向，比較耐彎折", correct: true, why: "沒錯！不用拆支撐，層紋方向也比較耐彎折。" },
+        { id: "r2", text: "因為平躺比較省時間", why: "時間長短不是手臂會不會斷的原因。" },
+        { id: "r3", text: "因為平躺印出來的塑膠比較硬", why: "塑膠的硬度一樣，差別在於有沒有懸空、層紋往哪個方向。" },
+        { id: "r4", text: "因為平躺印出來顏色比較深", why: "顏色和強度沒有關係。" }
+      ]
+    },
+    {
+      q: "為什麼模型底部需要「加寬接觸面積」，而不是直接用細細的腳跟站立？",
+      options: [
+        { id: "s1", text: "接觸面積變大，重心更穩，落地的衝擊也被分散到比較大的面積", correct: true, why: "沒錯！面積大就更穩，衝擊也不會全擠在腳踝。" },
+        { id: "s2", text: "因為加寬底座看起來比較帥", why: "外觀不是重點，重點是結構穩不穩。" },
+        { id: "s3", text: "因為加寬底座可以不用列印板", why: "還是要貼在列印板上才印得起來。" },
+        { id: "s4", text: "因為細腳會讓機器人變輕，輕的東西比較容易壞", why: "斷掉是因為衝擊集中在小面積，不是因為輕。" }
+      ]
+    },
+    {
+      q: "手臂的懸空有兩種可行做法：①拆下平躺印、不用支撐，再接合；②連著身體接續列印、開支撐。它們各有什麼取捨？",
+      options: [
+        { id: "u1", text: "①省耗材、表面乾淨，但多一道接合；②省去接合，但多用耗材、拆支撐要小心、底面較粗糙", correct: true, why: "沒錯！兩種都可行，要依零件大小、強度需求和後處理時間來選。" },
+        { id: "u2", text: "①一定比②強，所以只有①是對的", why: "兩種都能印出來；接合處是新的弱點，連著印的零件反而沒有接縫。" },
+        { id: "u3", text: "②不用支撐也能印出來，所以比較省", why: "②之所以能印，正是因為開了支撐材來托住懸空處。" },
+        { id: "u4", text: "兩種做法在耗材、時間、後處理上完全一樣", why: "支撐材會多用耗材與後處理時間；拆開印則多一道接合，兩者的代價不同。" }
+      ]
+    },
+    {
+      q: "手臂拆下來另外印之後，為什麼「接合處」也要用心設計？",
+      options: [
+        { id: "t1", text: "接合處是新的連接點：卡榫要留公差（太緊插不進去、太鬆會晃），黏合要有足夠的接觸面積，否則會鬆或斷", correct: true, why: "沒錯！拆開印解決了懸空，但接合處也要設計，才不會變成新的弱點。" },
+        { id: "t2", text: "不用設計，膠水黏上去就跟整塊一樣牢", why: "接合處通常比整塊實心更容易鬆脫或斷裂，是新的弱點。" },
+        { id: "t3", text: "卡榫越緊越好，用力敲進去就行", why: "太緊可能插不進去，甚至把零件撐裂，要留一點公差。" },
+        { id: "t4", text: "黏合一定比卡榫牢，所以只要黏合就好", why: "兩種各有優缺點：黏合靠接觸面積，卡榫靠尺寸準確，沒有哪一種一定比較牢。" }
+      ]
+    }
+  ]
+};
+
+</script>
+<style>
+:root{
+  --bg:#0a1a33; --panel:#13233f; --panel2:#1a2f52; --line:#2f5086; --text:#ffffff; --sub:#b9cbe8;
+  --orange:#ff8a1f; --orange2:#ffb066; --green:#39ff88; --red:#ff4d5e; --blue:#5aa9ff; --amber:#ffd24d;
+  --r:16px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Heiti TC",system-ui,sans-serif;font-size:18px;line-height:1.55}
+body{
+  background-image:linear-gradient(rgba(90,150,230,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(90,150,230,.16) 1px,transparent 1px),
+    linear-gradient(rgba(90,150,230,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(90,150,230,.07) 1px,transparent 1px);
+  background-size:96px 96px,96px 96px,16px 16px,16px 16px;
+}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+#app{max-width:1180px;margin:0 auto;padding:10px 14px 90px;min-height:100dvh;display:flex;flex-direction:column;gap:12px}
+
+/* 上方列 */
+.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:6;background:rgba(10,26,51,.94);padding:6px 4px;margin:0 -4px;border-radius:0 0 12px 12px}
+.brand{display:flex;flex-direction:column;line-height:1.2}
+.brand b{font-size:24px;letter-spacing:.04em}.brand span{font-size:15px;color:var(--orange2)}
+.chips{display:flex;gap:6px;flex:1;justify-content:center;flex-wrap:wrap}
+.chip{padding:5px 14px;border-radius:99px;border:2px solid var(--line);color:var(--sub);font-size:16px;white-space:nowrap}
+.chip.on{background:var(--orange);border-color:var(--orange);color:#1a0d00;font-weight:800}
+.chip.fin{border-color:var(--green);color:var(--green)}
+.badge{padding:5px 12px;border-radius:10px;font-size:16px;font-weight:700;border:2px solid var(--line);background:var(--panel)}
+.badge.done{border-color:var(--green);color:var(--green);box-shadow:0 0 14px rgba(57,255,136,.4)}
+#gear{width:52px;height:52px;border-radius:50%;border:2px solid var(--line);background:var(--panel);font-size:24px;position:relative;opacity:.8;padding:0}
+#gear .ring{position:absolute;inset:-5px;border-radius:50%;background:conic-gradient(var(--orange) var(--p,0deg),transparent 0);-webkit-mask:radial-gradient(circle,transparent 60%,#000 62%);mask:radial-gradient(circle,transparent 60%,#000 62%);pointer-events:none}
+
+/* 面板 */
+.panel{background:linear-gradient(180deg,var(--panel2),var(--panel));border:2px solid var(--line);border-radius:var(--r);padding:16px;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.panel h2{margin:0 0 8px;font-size:23px}.panel h3{margin:0 0 6px;font-size:19px;color:var(--orange2)}
+.panel p{margin:6px 0}
+.sub{color:var(--sub);font-size:16px}
+.grid2{display:grid;grid-template-columns:1.15fr 1fr;gap:12px}
+@media (max-width:860px){.grid2{grid-template-columns:1fr}#app{padding-bottom:100px}.brand b{font-size:20px}}
+@media (max-width:640px){.top{gap:6px}.brand{flex:1;min-width:0}.brand b{font-size:18px}.brand span{font-size:12px}.chips{order:5;flex-basis:100%;gap:4px}.chip{padding:3px 10px;font-size:14px;flex:1;text-align:center}#gear{width:46px;height:46px}.badge{padding:4px 8px;font-size:14px}.panel{padding:12px}.readout{font-size:32px}.codebox .code{font-size:56px}}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.spread{justify-content:space-between}
+
+/* 按鈕 */
+.btn{min-height:58px;padding:10px 22px;border-radius:14px;border:0;background:var(--orange);color:#1a0d00;font-weight:800;font-size:21px;box-shadow:0 4px 0 #a85509}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 #a85509}
+.btn.ghost{background:transparent;color:var(--text);border:2px solid var(--line);box-shadow:none;font-weight:600}
+.btn.green{background:var(--green);box-shadow:0 4px 0 #1b9b52}
+.btn[disabled]{background:#3a465c;color:#8e9bb3;box-shadow:none;cursor:not-allowed;transform:none}
+.btn.big{width:100%;min-height:68px;font-size:24px}
+.btn.small{min-height:44px;font-size:16px;padding:6px 14px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.opt{min-height:62px;padding:8px 10px;border-radius:12px;border:2px solid var(--line);background:#0e1c34;font-size:17px;text-align:center;line-height:1.3}
+.opt.on{border-color:var(--orange);background:rgba(255,138,31,.2);font-weight:800;box-shadow:0 0 0 2px var(--orange) inset}
+.opt[disabled]{opacity:.55;cursor:not-allowed}
+.optgrid{display:grid;grid-template-columns:1fr;gap:8px}
+.setting{margin-bottom:10px}.setting>b{display:block;margin-bottom:4px;color:var(--orange2)}
+
+/* SVG */
+svg{display:block;width:100%;height:auto}
+.ground{stroke:#6f8fbf;stroke-width:2}
+.solid{fill:#2a4a80;stroke:#9cc4ff;stroke-width:2}
+.accent{fill:#143258;stroke:var(--amber);stroke-width:2}
+.led{fill:var(--green)}
+.dash{stroke:var(--amber);stroke-width:2;stroke-dasharray:5 4}
+.dim{stroke:#9cc4ff;stroke-width:1.5;fill:none}
+.arc{stroke:var(--amber);stroke-width:2}
+.note{fill:var(--amber);font-size:14px;font-weight:700}
+.cap{fill:var(--sub);font-size:15px}
+.contact{fill:none;stroke:var(--orange);stroke-width:2;stroke-dasharray:3 2}
+.bed2{fill:rgba(255,255,255,.04);stroke:#38598f;stroke-dasharray:6 5}
+.hit{fill:transparent;stroke:none}
+.view3 .part{cursor:pointer;outline:none}
+.view3 .part:hover .solid,.view3 .part:focus-visible .solid{stroke:#fff}
+.view3 .part.marked .solid,.view3 .part.marked .contact{stroke:var(--orange);stroke-width:4;fill:rgba(255,138,31,.35);filter:drop-shadow(0 0 6px var(--orange))}
+.view3 .part.marked .contact{fill:var(--orange)}
+.ledge{stroke-width:16;stroke-linecap:butt}.ok-ledge{stroke:var(--green)}.bad-ledge{stroke:var(--red)}
+.ref45{stroke:var(--amber);stroke-width:2;stroke-dasharray:6 5}
+.noodle{fill:none;stroke:#ff9d6e;stroke-width:9;stroke-linecap:round;stroke-linejoin:round}
+.noodle.bad{stroke:var(--red)}
+.okt{fill:var(--green);font-weight:700}.badt{fill:#ff8d97;font-weight:700}
+.lattice{fill:none;stroke:#7fe3ff;stroke-width:2.5;stroke-dasharray:5 3}.lattice.waste{stroke:#ff9d6e}
+.crack{fill:none;stroke:var(--red);stroke-width:3}
+.scratch{fill:none;stroke:var(--red);stroke-width:2}
+.scene{background:radial-gradient(ellipse at 50% 100%,rgba(90,150,230,.18),transparent 70%);border-radius:12px}
+.bed{fill:#4a5b7a;stroke:#9db2d6;stroke-width:2}.bedt{fill:#d7e3f8;font-size:10px}
+.rail{stroke:#8aa4d0;stroke-width:3}.carr{fill:#3b5f9c;stroke:#9cc4ff}.nozzle{fill:var(--orange)}
+.lab{fill:var(--orange2);font-size:15px;font-weight:700}
+.led2{stroke:#0004;stroke-width:1}.led2.off{fill:#445}.led2.heat{fill:var(--orange)}.led2.green{fill:var(--green);filter:drop-shadow(0 0 5px var(--green))}.led2.red{fill:var(--red);filter:drop-shadow(0 0 5px var(--red))}
+.snap{fill:var(--red);font-weight:900}
+.hlbox{stroke:var(--orange);stroke-width:3;stroke-dasharray:8 5;animation:pulse 1.2s ease-in-out infinite}
+.bad{stroke:var(--red)!important;animation:flash .5s ease-in-out 4}
+.demo{background:rgba(255,255,255,.04);border-radius:12px}
+.hatch{animation:none}
+.peg{fill:var(--amber);stroke:#0006;stroke-width:1}.seam{stroke:var(--amber);stroke-width:2;stroke-dasharray:3 2}
+.hole{fill:#06101f;stroke:#9cc4ff;stroke-width:2}.glue{fill:var(--orange2)}
+@keyframes slidein{0%,15%{transform:translateX(30px)}55%,100%{transform:translateX(-20px)}}
+.slidein{animation:slidein 3.6s ease-in-out infinite}
+@keyframes slidein2{0%,15%{transform:translateX(26px)}55%,100%{transform:translateX(0)}}
+.slidein2{animation:slidein2 3.6s ease-in-out infinite}
+
+/* 動畫 */
+@keyframes pulse{50%{opacity:.35}}
+@keyframes flash{50%{filter:drop-shadow(0 0 8px var(--red));fill:rgba(255,77,94,.55)}}
+@keyframes droop{0%,30%{transform:rotate(0)}70%,100%{transform:rotate(50deg)}}
+.droop{animation:droop 3.2s ease-in-out infinite}
+@keyframes armfall{0%,45%{transform:rotate(0)}70%,100%{transform:rotate(20deg) translateY(4px)}}
+.armfall{animation:armfall 3.6s ease-in infinite}
+@keyframes crackin{0%,55%{opacity:0}70%,100%{opacity:1}}
+.demo .crack{animation:crackin 3.6s infinite}
+@keyframes wob{0%,40%{transform:rotate(0)}70%{transform:rotate(9deg)}100%{transform:rotate(60deg) translateY(10px)}}
+.wobble{animation:wob 3.4s ease-in infinite}
+@keyframes steady{50%{transform:translateY(-3px)}}
+.steady{animation:steady 1.6s ease-in-out infinite}
+@keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+.shake{animation:shake .4s}
+@keyframes pop{0%{transform:scale(.8);opacity:0}100%{transform:scale(1);opacity:1}}
+.pop{animation:pop .35s ease-out}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  .droop{transform:rotate(50deg)}.armfall{transform:rotate(20deg) translateY(4px)}.wobble{transform:rotate(60deg) translateY(10px)}.slidein{transform:translateX(-20px)}
+}
+
+/* 範圍滑桿 */
+input[type=range]{width:100%;height:56px;touch-action:none;accent-color:var(--orange);background:transparent}
+input[type=range]::-webkit-slider-thumb{width:44px;height:44px}
+input[type=range]::-moz-range-thumb{width:44px;height:44px}
+.readout{font-size:40px;font-weight:900;color:var(--amber);text-align:center;letter-spacing:.02em}
+.verdict{font-size:20px;font-weight:800;text-align:center;min-height:32px}
+.verdict.ok{color:var(--green)}.verdict.bad{color:#ff8d97}
+
+/* 診斷 */
+.tabs{display:flex;gap:8px;margin-bottom:8px}
+.tab{flex:1;min-height:52px;border-radius:12px;border:2px solid var(--line);background:#0e1c34;font-size:18px;font-weight:700}
+.tab.on{border-color:var(--orange);background:rgba(255,138,31,.2)}
+.tab.seen::after{content:" ✓";color:var(--green)}
+.partchips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0}
+.pchip{min-height:56px;border-radius:12px;border:2px solid var(--line);background:#0e1c34;font-size:18px;font-weight:700}
+.pchip.on{border-color:var(--orange);background:rgba(255,138,31,.25)}
+.reasons{display:grid;gap:8px;margin-top:6px}
+.reasons .opt{text-align:left;padding:10px 14px}
+.reasons .opt.good{border-color:var(--green);background:rgba(57,255,136,.15)}
+.reasons .opt.wrong{border-color:var(--red);background:rgba(255,77,94,.15)}
+
+/* 結果 */
+.res2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+@media (max-width:560px){.res2{grid-template-columns:1fr}}
+.rescard{border-radius:12px;border:2px solid var(--line);padding:10px 12px;background:#0e1c34}
+.rescard.pass{border-color:var(--green)}.rescard.fail{border-color:var(--red);background:rgba(255,77,94,.1)}
+.rescard b{display:block;font-size:19px}.rescard.pass b{color:var(--green)}.rescard.fail b{color:#ff8d97}
+.note-box{border-left:5px solid var(--amber);background:rgba(255,210,77,.1);padding:8px 12px;border-radius:8px;margin-top:8px}
+.msg{min-height:28px;margin-top:8px;font-size:18px}
+.msg.bad{color:#ff9aa3}.msg.good{color:var(--green)}.msg.info{color:var(--amber)}
+
+/* 成功 */
+.codebox{margin:10px 0;padding:14px;border:3px dashed var(--green);border-radius:16px;text-align:center;background:rgba(57,255,136,.08)}
+.codebox .code{font-size:72px;font-weight:900;letter-spacing:.2em;color:var(--green);text-shadow:0 0 18px rgba(57,255,136,.6);line-height:1.1}
+.icon-laser{width:120px;margin:0 auto}
+
+/* 底部列 */
+.foot{position:fixed;left:0;right:0;bottom:0;padding:8px 14px calc(8px + env(safe-area-inset-bottom));background:linear-gradient(0deg,#07122b 70%,transparent);display:flex;gap:10px;align-items:center;justify-content:center;z-index:5}
+.foot .info{position:absolute;left:14px;bottom:4px;font-size:12px;color:#6f86ab;pointer-events:none}
+#hintsheet{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);width:min(680px,94vw);z-index:8;background:#0f2a3f;border:3px solid var(--amber);border-radius:16px;padding:12px 16px;box-shadow:0 10px 30px #000a}
+#hintsheet .lv{color:var(--amber);font-weight:800}
+#toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:30;max-width:92vw;padding:10px 18px;border-radius:12px;font-weight:700;background:#102b4d;border:2px solid var(--line);box-shadow:0 8px 24px #000a}
+#toast.bad{border-color:var(--red);background:#3a1620}#toast.good{border-color:var(--green)}
+
+/* 覆蓋層 */
+.overlay{position:fixed;inset:0;z-index:20;background:rgba(5,12,28,.88);display:flex;align-items:center;justify-content:center;padding:16px}
+.overlay .box{max-width:560px;width:100%;background:var(--panel);border:3px solid var(--orange);border-radius:20px;padding:20px;text-align:center}
+.overlay.lock .box{border-color:var(--red)}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.keypad button{min-height:60px;font-size:26px;border-radius:12px;border:2px solid var(--line);background:#0e1c34}
+.pindots{font-size:34px;letter-spacing:.4em;min-height:48px}
+.stepper{display:flex;align-items:center;justify-content:center;gap:14px;margin:8px 0}
+.stepper button{width:56px;height:56px;border-radius:12px;border:2px solid var(--line);background:#0e1c34;font-size:28px}
+.stepper output{font-size:40px;font-weight:900;min-width:70px}
+
+/* 測試面板 */
+.testpanel{background:#06101f;border:2px solid var(--blue);border-radius:12px;padding:8px 12px;font-size:14px;max-height:46vh;overflow:auto}
+.testpanel summary{font-weight:800;cursor:pointer}.testpanel ul{margin:6px 0 0;padding-left:18px}
+.testpanel .good{color:var(--green)}.testpanel .bad{color:#ff8d97}
+.hidden{display:none!important}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="brand"><b id="brandT"></b><span id="brandS"></span></div>
+    <div class="chips" id="chips"></div>
+    <span class="badge" id="grp"></span>
+    <span class="badge done hidden" id="donebadge">✔ 已完成</span>
+    <button id="gear" aria-label="關主（長按 3 秒）" title="關主專用：長按 3 秒"><span class="ring"></span>⚙</button>
+  </header>
+  <main id="main"></main>
+</div>
+<div class="foot"><button class="btn ghost hidden" id="hintbtn"></button><span class="info" id="info"></span></div>
+<div id="hintsheet" class="hidden" role="status"></div>
+<div id="toast" class="hidden" role="status" aria-live="polite"></div>
+<div id="lock" class="overlay lock hidden"><div class="box"><h2>🔒 機器暫停</h2><p id="lockmsg"></p>
+  <button class="btn ghost" id="lockhold" style="width:100%;position:relative"><span class="ring" style="position:absolute;inset:-4px;border-radius:18px;background:conic-gradient(var(--orange) var(--p,0deg),transparent 0);-webkit-mask:linear-gradient(#000 0 0);pointer-events:none;opacity:.35"></span>關主：長按 3 秒解鎖</button></div></div>
+<div id="adm" class="overlay hidden"></div>
+<script id="logic">
+/* =====================================================================
+   遊戲邏輯層：不碰畫面的純函式。reduce(state, action, now) → {state, fb}
+   ===================================================================== */
+const Logic = (() => {
+  "use strict";
+  const C = CONFIG;
+  const KEYS = { support: ["off", "on"], arm: ["stand", "flat"], foot: ["thin", "wide"] };
+  const FLAGKEYS = { support: ["off", "on"], orient: ["stand", "flat"] };
+  const PARTS = ["head", "body", "arm", "foot"];
+  const WEAK = ["arm", "foot"];
+  const VIEWS = ["front", "side", "top"];
+  const PHASES = ["intro", "A", "B1", "B2", "C1", "C2", "done"];
+  const CARDS = C.demo.length;
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+
+  /* 玩家會看到的文字插進畫面前先跳脫 */
+  const esc = (s) => String(s).replace(/[&<>"'`]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;" }[ch]));
+
+  /* 可重現的洗牌（同一個種子順序固定，重整不會變） */
+  function rng(seed) { let s = (seed >>> 0) || 1; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }
+  function shuffle(arr, seed) {
+    const a = arr.slice(); const r = rng(seed);
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+
+  const codeFor = (group) => { const l = C.groupCodes; return l[(((group | 0) - 1) % l.length + l.length) % l.length]; };
+  const keyOf = (set) => set.support + "|" + set.arm + "|" + set.foot;
+
+  /* ---------- 判定（寫死，不放寬） ---------- */
+  function evaluate(set) {
+    /* 兩種可行做法：①拆下平躺印＋不開支撐（再接合）②連著身體接續列印＋開支撐 */
+    const printCode = set.arm === "stand" ? (set.support === "off" ? "collapse" : "okSupport") : (set.support === "off" ? "ok" : "supportWaste");
+    const dropCode = set.foot === "thin" ? "ankleBreak" : "ok";
+    const printOk = printCode === "ok" || printCode === "okSupport", dropOk = dropCode === "ok";
+    return { printCode, dropCode, printOk, dropOk, success: printOk && dropOk };
+  }
+  function evalFlag(set) {
+    const code = set.orient === "stand" ? (set.support === "off" ? "collapse" : "okSupport") : (set.support === "off" ? "ok" : "waste");
+    return { code, ok: code === "ok" || code === "okSupport" };
+  }
+  const resultView = (ev) => ({
+    printOk: ev.printOk, dropOk: ev.dropOk, printCode: ev.printCode, dropCode: ev.dropCode,
+    printText: C.msg.print[ev.printCode], dropText: C.msg.drop[ev.dropCode]
+  });
+  function successInfo(s) {
+    const code = codeFor(s.group); const fill = (t) => String(t).split("{code}").join(code);
+    return { code, label: C.codeLabel, story: fill(C.story.success), next: fill(C.story.next), group: s.group };
+  }
+
+  /* ---------- 初始狀態 ---------- */
+  function initial(group, seed) {
+    const n = C.groupCodes.length; let g = Math.floor(Number(group));
+    if (!(g >= 1 && g <= n)) g = 1;
+    return {
+      v: 1, group: g, seed: (seed >>> 0) || 1, phase: "intro", aIdx: 0, cardStart: 0,
+      b1: { angle: C.b1.start }, b2: clone(C.flag.defaults),
+      c1: { views: { front: false, side: false, top: false }, marks: { head: false, body: false, arm: false, foot: false }, reasons: { arm: null, foot: null } },
+      set: clone(C.defaults),
+      failCount: 0, failsSinceUnlock: 0, cooldownUntil: 0, locked: false, tried: [],
+      hintSeen: { A: 0, B1: 0, B2: 0, C1: 0, C2: 0 }, hintsUsed: 0,
+      completed: false, animating: false
+    };
+  }
+
+  const stageOf = (phase) => (["A", "B1", "B2", "C1", "C2"].includes(phase) ? phase : null);
+  function hintText(stage, lv) { return (stage === "C2" && lv === 3 && C.hint3Explicit) ? C.hints.C2explicit : C.hints[stage][lv - 1]; }
+  const cooldownLeft = (s, now) => Math.max(0, s.cooldownUntil - now);
+  const checkPin = (pin) => String(pin) === String(C.masterPin);
+
+  /* ---------- 唯一的狀態轉換函式 ---------- */
+  function reduce(st, a, now) {
+    now = Number(now) || 0;
+    const s = clone(st);
+    const rej = (kind, extra) => ({ state: st, fb: Object.assign({ ok: false, kind }, extra || {}) });
+    const ok = (kind, extra) => ({ state: s, fb: Object.assign({ ok: true, kind }, extra || {}) });
+    const c2Guard = () => {
+      if (s.phase === "done") return "completed";
+      if (s.phase !== "C2") return "badPhase";
+      if (s.animating) return "busy";
+      if (s.locked) return "locked";
+      return null;
+    };
+
+    switch (a.type) {
+      case "start":
+        if (s.phase !== "intro") return rej("badPhase");
+        s.phase = "A"; s.aIdx = 0; s.cardStart = now; return ok("started");
+
+      case "aNext": {
+        if (s.phase !== "A") return rej("badPhase");
+        const waited = now - s.cardStart;
+        if (waited < C.timing.demoMs) return rej("tooEarly", { waitMs: C.timing.demoMs - waited });
+        if (s.aIdx < CARDS - 1) { s.aIdx++; s.cardStart = now; return ok("nextCard"); }
+        s.phase = "B1"; return ok("toB1");
+      }
+
+      /* B1 角度實驗 */
+      case "b1Set": {
+        if (s.phase !== "B1") return rej("badPhase");
+        const n = Math.round(Number(a.angle)); if (!Number.isFinite(n)) return rej("badValue");
+        s.b1.angle = clamp(n, 0, C.b1.max); return ok("b1Set", { angle: s.b1.angle });
+      }
+      case "b1Confirm": {
+        if (s.phase !== "B1") return rej("badPhase");
+        const ang = s.b1.angle;
+        if (ang === C.b1.critical) { s.phase = "B2"; return ok("b1ok"); }
+        return rej(ang < C.b1.critical ? "b1Low" : "b1High", { angle: ang });
+      }
+
+      /* B2 小旗子（引導：有高亮與提示，不計失敗次數） */
+      case "b2Set": {
+        if (s.phase !== "B2") return rej("badPhase");
+        if (!FLAGKEYS[a.key] || !FLAGKEYS[a.key].includes(a.value)) return rej("badValue");
+        s.b2[a.key] = a.value; return ok("b2Set");
+      }
+      case "b2Run": {
+        if (s.phase !== "B2") return rej("badPhase");
+        const ev = evalFlag(s.b2);
+        if (ev.ok) { s.phase = "C1"; return ok("b2ok", { code: ev.code, text: C.msg.flag.ok }); }
+        return rej("b2fail", { code: ev.code, text: C.msg.flag[ev.code] });
+      }
+
+      /* C1 三視圖診斷 */
+      case "c1View":
+        if (s.phase !== "C1") return rej("badPhase");
+        if (!VIEWS.includes(a.view)) return rej("badValue");
+        s.c1.views[a.view] = true; return ok("viewed", { view: a.view });
+      case "c1Mark": {
+        if (s.phase !== "C1") return rej("badPhase");
+        if (!PARTS.includes(a.part)) return rej("badValue");
+        const now1 = !s.c1.marks[a.part]; s.c1.marks[a.part] = now1;
+        if (!now1 && WEAK.includes(a.part)) s.c1.reasons[a.part] = null;
+        if (!now1) return ok("unmarked");
+        if (!WEAK.includes(a.part)) return ok("markWrong", { part: a.part, text: C.c1.parts[a.part].whyNot });
+        return ok("markWeak", { part: a.part });
+      }
+      case "c1Reason": {
+        if (s.phase !== "C1") return rej("badPhase");
+        if (!WEAK.includes(a.part)) return rej("badValue");
+        if (!s.c1.marks[a.part]) return rej("notMarked");
+        const opt = C.c1.reasons[a.part].find((o) => o.id === a.option);
+        if (!opt) return rej("badValue");
+        s.c1.reasons[a.part] = opt.id;
+        return ok(opt.correct ? "reasonOk" : "reasonWrong", { part: a.part, text: opt.correct ? "" : opt.why });
+      }
+      case "c1Check": {
+        if (s.phase !== "C1") return rej("badPhase");
+        const c = s.c1;
+        const missingViews = VIEWS.filter((v) => !c.views[v]);
+        if (missingViews.length) return rej("needViews", { missing: missingViews });
+        const extra = PARTS.filter((p) => c.marks[p] && !WEAK.includes(p));
+        if (extra.length) return rej("extraMark", { part: extra[0], text: C.c1.parts[extra[0]].whyNot });
+        const miss = WEAK.filter((p) => !c.marks[p]);
+        if (miss.length) return rej("missingMarks", { count: miss.length });
+        for (const p of WEAK) if (!c.reasons[p]) return rej("needReason", { part: p });
+        for (const p of WEAK) {
+          const opt = C.c1.reasons[p].find((o) => o.id === c.reasons[p]);
+          if (!opt || !opt.correct) return rej("wrongReason", { part: p, text: opt ? opt.why : "" });
+        }
+        s.phase = "C2"; return ok("c1Done");
+      }
+
+      /* C2 設定 */
+      case "set": {
+        const g = c2Guard(); if (g) return rej(g);
+        if (!KEYS[a.key] || !KEYS[a.key].includes(a.value)) return rej("badValue");
+        s.set[a.key] = a.value; return ok("set");
+      }
+      case "toggle": {
+        const g = c2Guard(); if (g) return rej(g);
+        if (!KEYS[a.key]) return rej("badValue");
+        const opts = KEYS[a.key]; s.set[a.key] = opts[(opts.indexOf(s.set[a.key]) + 1) % opts.length]; return ok("set");
+      }
+      case "resetSet": {
+        const g = c2Guard(); if (g) return rej(g);
+        s.set = clone(C.defaults); return ok("resetSet");
+      }
+
+      /* 開始列印模擬 */
+      case "print": {
+        if (s.phase === "done") {
+          if (s.animating) return rej("busy");
+          s.animating = true; return ok("replay", { success: successInfo(s) });
+        }
+        if (["intro", "A", "B1", "B2"].includes(s.phase)) return rej("needTutorial");
+        if (s.phase === "C1") return rej("needC1");
+        if (s.animating) return rej("busy");
+        if (s.locked) return rej("locked");
+        if (now < s.cooldownUntil) return rej("cooldown", { leftMs: s.cooldownUntil - now });
+        const key = keyOf(s.set);
+        if (s.tried.includes(key)) return rej("repeat");
+        const ev = evaluate(s.set);
+        const animMs = Number(a.animMs) > 0 ? Number(a.animMs) : C.timing.animMs;
+        s.animating = true;
+        if (ev.success) {
+          s.phase = "done"; s.completed = true;
+          return ok("success", { result: resultView(ev), success: successInfo(s) });
+        }
+        s.failCount++; s.failsSinceUnlock++; s.tried.push(key);
+        s.cooldownUntil = now + animMs + C.timing.cooldownMs;
+        if (s.failsSinceUnlock >= C.timing.lockAfter) s.locked = true;
+        return ok("fail", { result: resultView(ev), failCount: s.failCount, lockedNow: s.locked });
+      }
+      case "animEnd": s.animating = false; return ok("animEnd");
+
+      /* 完成後 */
+      case "showSuccess":
+        if (s.phase !== "done") return rej("notDone");
+        return ok("success", { success: successInfo(s) });
+      case "review": {
+        if (s.phase !== "done") return rej("notDone");
+        const q = C.review[a.q]; if (!q) return rej("badValue");
+        const o = q.options.find((x) => x.id === a.option); if (!o) return rej("badValue");
+        return ok("review", { correct: !!o.correct, text: o.why || "" });
+      }
+
+      /* 提示（由淺到深，依序解鎖） */
+      case "hint": {
+        const stg = stageOf(s.phase); if (!stg) return rej("noHint");
+        const seen = s.hintSeen[stg];
+        let lv = a.level ? Math.floor(Number(a.level)) : seen + 1;
+        if (!Number.isFinite(lv)) lv = seen + 1;
+        lv = Math.max(1, Math.min(lv, seen + 1, 3));
+        s.hintSeen[stg] = Math.max(seen, lv); s.hintsUsed++;
+        return ok("hint", { level: lv, stage: stg, text: hintText(stg, lv) });
+      }
+
+      /* 關主 */
+      case "unlock":
+        if (!checkPin(a.pin)) return rej("badPin");
+        s.locked = false; s.failsSinceUnlock = 0; return ok("unlocked");
+      case "reset": {
+        if (!checkPin(a.pin)) return rej("badPin");
+        const next = initial(a.group != null ? a.group : s.group, a.seed != null ? a.seed : s.seed + 1);
+        return { state: next, fb: { ok: true, kind: "reset" } };
+      }
+    }
+    return rej("unknown");
+  }
+
+  /* ---------- 選項順序隨機（種子固定，重整不變） ---------- */
+  const reasonOptions = (st, part) => shuffle(C.c1.reasons[part].map((o) => ({ id: o.id, text: o.text })), st.seed + (part === "arm" ? 11 : 23));
+  const reviewOptions = (st, qi) => shuffle(C.review[qi].options.map((o) => ({ id: o.id, text: o.text })), st.seed + 101 + qi * 7);
+
+  /* ---------- 存檔／還原 ---------- */
+  function serialize(s) {
+    return JSON.stringify({
+      v: 1, group: s.group, seed: s.seed, phase: s.phase, aIdx: s.aIdx, c1: s.c1,
+      failCount: s.failCount, failsSinceUnlock: s.failsSinceUnlock, cooldownUntil: s.cooldownUntil,
+      locked: s.locked, tried: s.tried, hintSeen: s.hintSeen, hintsUsed: s.hintsUsed, completed: s.completed
+    });
+  }
+  function restore(json, now, seed) {
+    const fresh = () => initial(1, seed);
+    if (!json) return fresh();
+    try {
+      const o = JSON.parse(json);
+      if (!o || o.v !== 1) return fresh();
+      const isInt = (n, lo, hi) => Number.isInteger(n) && n >= lo && n <= hi;
+      if (!isInt(o.group, 1, C.groupCodes.length) || !isInt(o.seed, 1, 4294967295)) return fresh();
+      if (!PHASES.includes(o.phase) || !isInt(o.aIdx, 0, CARDS - 1)) return fresh();
+      if (o.completed !== (o.phase === "done")) return fresh();
+      if (typeof o.locked !== "boolean") return fresh();
+      if (!isInt(o.failCount, 0, 1e6) || !isInt(o.failsSinceUnlock, 0, 1e6) || !isInt(o.hintsUsed, 0, 1e6)) return fresh();
+      if (!Number.isFinite(o.cooldownUntil) || o.cooldownUntil < 0) return fresh();
+      if (!Array.isArray(o.tried) || !o.tried.every((k) => typeof k === "string" && /^(off|on)\|(stand|flat)\|(thin|wide)$/.test(k))) return fresh();
+      const c = o.c1;
+      if (!c || !VIEWS.every((v) => typeof c.views[v] === "boolean") || !PARTS.every((p) => typeof c.marks[p] === "boolean")) return fresh();
+      for (const p of WEAK) { const r = c.reasons[p]; if (!(r === null || C.c1.reasons[p].some((x) => x.id === r))) return fresh(); }
+      const hs = o.hintSeen; if (!hs || !Object.keys(initial(1, 1).hintSeen).every((k) => isInt(hs[k], 0, 3))) return fresh();
+      const s = initial(o.group, o.seed);
+      s.phase = o.phase; s.aIdx = o.aIdx; s.c1 = clone(c); s.failCount = o.failCount; s.failsSinceUnlock = o.failsSinceUnlock;
+      s.cooldownUntil = Math.min(o.cooldownUntil, (Number(now) || 0) + C.timing.cooldownMs + C.timing.animMs);
+      s.locked = o.locked; s.tried = o.tried.slice(); s.hintSeen = clone(hs); s.hintsUsed = o.hintsUsed; s.completed = o.completed;
+      s.animating = false;
+      if (s.phase === "A") s.cardStart = Number(now) || 0;
+      return s;
+    } catch (e) { return fresh(); }
+  }
+
+  /* localStorage 包 try/catch，失敗就退回記憶體變數 */
+  function makeStore(storage, key) {
+    let mem = null; let useMem = !storage;
+    return {
+      get() { if (!useMem) { try { return storage.getItem(key); } catch (e) { useMem = true; } } return mem; },
+      set(v) { if (!useMem) { try { storage.setItem(key, v); return; } catch (e) { useMem = true; } } mem = v; },
+      del() { mem = null; if (storage) { try { storage.removeItem(key); } catch (e) { /* 忽略 */ } } },
+      get usingMemory() { return useMem; }
+    };
+  }
+
+  return {
+    initial, reduce, evaluate, evalFlag, serialize, restore, makeStore, esc, shuffle,
+    reasonOptions, reviewOptions, cooldownLeft, checkPin, codeFor, successInfo, keyOf, stageOf,
+    consts: { KEYS, FLAGKEYS, PARTS, WEAK, VIEWS, PHASES, CARDS }
+  };
+})();
+
+</script>
+<script id="tests">
+/* =====================================================================
+   自動測試（對應「自動測試表」）。網址加 ?test=1 會在頁面上顯示通過／失敗
+   ===================================================================== */
+const Tests = (() => {
+  "use strict";
+  const C = CONFIG, L = Logic;
+  const { VIEWS, WEAK } = L.consts;
+  const T0 = 1000000;
+  const list = [];
+  const T = (name, fn) => list.push({ name, fn });
+  const eq = (a, b, m) => { const x = JSON.stringify(a), y = JSON.stringify(b); if (x !== y) throw new Error((m || "不相等") + "：得到 " + x + "，預期 " + y); };
+  const ok = (c, m) => { if (!c) throw new Error(m || "條件不成立"); };
+  const correctId = (p) => C.c1.reasons[p].find((o) => o.correct).id;
+  const wrongId = (p) => C.c1.reasons[p].find((o) => !o.correct).id;
+
+  /* 小工具：依序套用動作 */
+  function drive(st, t) {
+    const o = { st, t, fb: null };
+    o.go = (a, dt) => { if (dt) o.t += dt; const r = L.reduce(o.st, a, o.t); o.st = r.state; o.fb = r.fb; return r.fb; };
+    return o;
+  }
+  function toPhase(target, group) {
+    const d = drive(L.initial(group || 1, 7), T0);
+    const order = ["intro", "A", "B1", "B2", "C1", "C2"];
+    const at = (p) => order.indexOf(d.st.phase) >= order.indexOf(p);
+    if (order.indexOf(target) >= 1) d.go({ type: "start" });
+    if (order.indexOf(target) >= 2) { for (let i = 0; i < C.demo.length; i++) d.go({ type: "aNext" }, C.timing.demoMs); }
+    if (order.indexOf(target) >= 3) { d.go({ type: "b1Set", angle: 45 }); d.go({ type: "b1Confirm" }); }
+    if (order.indexOf(target) >= 4) { d.go({ type: "b2Set", key: "orient", value: "flat" }); d.go({ type: "b2Run" }); }
+    if (order.indexOf(target) >= 5) {
+      VIEWS.forEach((v) => d.go({ type: "c1View", view: v }));
+      WEAK.forEach((p) => { d.go({ type: "c1Mark", part: p }); d.go({ type: "c1Reason", part: p, option: correctId(p) }); });
+      d.go({ type: "c1Check" });
+    }
+    void at; return d;
+  }
+  const reachC2 = (group) => toPhase("C2", group);
+  const setAll = (d, set) => { Object.keys(set).forEach((k) => d.go({ type: "set", key: k, value: set[k] })); };
+  const SOLVE = { support: "off", arm: "flat", foot: "wide" };
+  const combos = () => { const r = []; ["stand", "flat"].forEach((a) => ["off", "on"].forEach((s) => ["thin", "wide"].forEach((f) => r.push({ support: s, arm: a, foot: f })))); return r; };
+  const SOLVE_B = { support: "on", arm: "stand", foot: "wide" };
+  const isWin = (x) => same(x, SOLVE) || same(x, SOLVE_B);
+  const same = (x, y) => x.support === y.support && x.arm === y.arm && x.foot === y.foot;
+  const afterCooldown = (d) => { d.go({ type: "animEnd" }); d.t = d.st.cooldownUntil; };
+  const FORBID = () => ["平躺", "加寬", ...C.groupCodes];
+
+  /* ---------- 1 正常 ---------- */
+  T("T1-1 完整成功：關／平躺／加寬 → 成功並顯示該組代碼", () => {
+    const d = reachC2(1); eq(d.st.phase, "C2"); setAll(d, SOLVE); d.go({ type: "print" });
+    eq(d.fb.kind, "success"); ok(d.st.completed && d.st.phase === "done", "應為已完成");
+    eq(d.fb.success.code, C.groupCodes[0]); ok(d.fb.result.printOk && d.fb.result.dropOk);
+  });
+  T("T1-2 判定矩陣：8 種組合只有 2 種成功（平躺不開支撐／連著印開支撐，且都要加寬）", () => {
+    let wins = 0;
+    combos().forEach((set) => {
+      const d = reachC2(); setAll(d, set); d.go({ type: "print" });
+      const isSolve = isWin(set);
+      eq(d.fb.kind, isSolve ? "success" : "fail", JSON.stringify(set));
+      if (d.fb.kind === "success") wins++;
+      const ev = L.evaluate(set);
+      eq([ev.printOk, ev.dropOk], [(set.arm === "stand") === (set.support === "on"), set.foot === "wide"], "階段判定 " + JSON.stringify(set));
+    });
+    eq(wins, 2);
+  });
+  T("T1-3 做法②：連著身體接續列印＋開支撐＋加寬 → 也成功並給同一組代碼", () => {
+    const d = reachC2(2); setAll(d, SOLVE_B); d.go({ type: "print" });
+    eq(d.fb.kind, "success"); eq(d.fb.result.printCode, "okSupport"); eq(d.fb.success.code, C.groupCodes[1]);
+  });
+  T("T1-4 做法②只通過列印、腳還細 → 仍失敗（落摔）", () => {
+    const d = reachC2(); setAll(d, { support: "on", arm: "stand", foot: "thin" }); d.go({ type: "print" });
+    eq(d.fb.kind, "fail"); eq([d.fb.result.printCode, d.fb.result.dropCode], ["okSupport", "ankleBreak"]);
+  });
+
+  /* ---------- 2 錯誤 ---------- */
+  T("T2-1 站立＋開＋細腳：列印✔（接續列印）、落摔✘，設定保留、失敗次數＋1", () => {
+    const d = reachC2(); const set = { support: "on", arm: "stand", foot: "thin" }; setAll(d, set); d.go({ type: "print" });
+    eq(d.fb.kind, "fail"); eq([d.fb.result.printCode, d.fb.result.dropCode], ["okSupport", "ankleBreak"]);
+    eq(d.st.set, set, "設定應保留"); eq(d.st.failCount, 1); eq(d.st.phase, "C2");
+  });
+  T("T2-2 平躺＋關＋細腳：列印✔、落摔✘腳踝斷裂，手臂設定保留", () => {
+    const d = reachC2(); setAll(d, { support: "off", arm: "flat", foot: "thin" }); d.go({ type: "print" });
+    eq([d.fb.result.printCode, d.fb.result.dropCode], ["ok", "ankleBreak"]); eq(d.st.set.arm, "flat");
+  });
+  T("T2-3 平躺＋開＋加寬：列印✘支撐多餘", () => {
+    const d = reachC2(); setAll(d, { support: "on", arm: "flat", foot: "wide" }); d.go({ type: "print" });
+    eq([d.fb.result.printCode, d.fb.result.dropCode], ["supportWaste", "ok"]);
+  });
+  T("T2-4 失敗訊息不洩漏：不含選項名稱、不含任何代碼", () => {
+    const d0 = reachC2(); const words = FORBID();
+    combos().filter((s) => !isWin(s)).forEach((set) => {
+      const d = drive(d0.st, d0.t); setAll(d, set); d.go({ type: "print" });
+      const txt = d.fb.result.printText + d.fb.result.dropText;
+      words.forEach((w) => ok(!txt.includes(w), "訊息含有「" + w + "」：" + txt));
+      ok(!JSON.stringify(d.fb).includes("success"), "失敗回饋不應含成功資訊");
+    });
+  });
+
+  /* ---------- 3 邊界（差一點） ---------- */
+  T("T3-1 B1 角度 44／45／46", () => {
+    const d = toPhase("B1");
+    d.go({ type: "b1Set", angle: 44 }); d.go({ type: "b1Confirm" }); eq(d.fb.kind, "b1Low"); eq(d.st.phase, "B1");
+    d.go({ type: "b1Set", angle: 46 }); d.go({ type: "b1Confirm" }); eq(d.fb.kind, "b1High"); eq(d.st.phase, "B1");
+    d.go({ type: "b1Set", angle: 45 }); d.go({ type: "b1Confirm" }); eq(d.fb.kind, "b1ok"); eq(d.st.phase, "B2");
+  });
+  T("T3-1b B1 滑桿取整數並限制在 0–90", () => {
+    const d = toPhase("B1"); d.go({ type: "b1Set", angle: 999 }); eq(d.st.b1.angle, 90);
+    d.go({ type: "b1Set", angle: -5 }); eq(d.st.b1.angle, 0); d.go({ type: "b1Set", angle: 44.6 }); eq(d.st.b1.angle, 45);
+    eq(d.go({ type: "b1Set", angle: "abc" }).kind, "badValue");
+  });
+  T("T3-2 C1 多標頭部：未完成並說明頭部不是弱點，取消後可完成", () => {
+    const d = toPhase("C1"); VIEWS.forEach((v) => d.go({ type: "c1View", view: v }));
+    WEAK.concat("head").forEach((p) => d.go({ type: "c1Mark", part: p }));
+    WEAK.forEach((p) => d.go({ type: "c1Reason", part: p, option: correctId(p) }));
+    d.go({ type: "c1Check" }); eq(d.fb.kind, "extraMark"); eq(d.fb.part, "head"); ok(d.fb.text.length > 0); eq(d.st.phase, "C1");
+    d.go({ type: "c1Mark", part: "head" }); d.go({ type: "c1Check" }); eq(d.fb.kind, "c1Done");
+  });
+  T("T3-3 少看一個視圖：未完成並指出沒看的視圖", () => {
+    const d = toPhase("C1"); ["front", "side"].forEach((v) => d.go({ type: "c1View", view: v }));
+    WEAK.forEach((p) => { d.go({ type: "c1Mark", part: p }); d.go({ type: "c1Reason", part: p, option: correctId(p) }); });
+    d.go({ type: "c1Check" }); eq(d.fb.kind, "needViews"); eq(d.fb.missing, ["top"]); eq(d.st.phase, "C1");
+  });
+  T("T3-4 開關奇偶：支撐連切 3 次→開，列印判失敗", () => {
+    const d = reachC2(); setAll(d, { arm: "flat", foot: "wide" });
+    for (let i = 0; i < 3; i++) d.go({ type: "toggle", key: "support" });
+    eq(d.st.set.support, "on"); d.go({ type: "print" }); eq(d.fb.result.printCode, "supportWaste");
+  });
+  T("T3-5 冷卻邊界：剛好結束可按、差 1ms 不行", () => {
+    const d = reachC2(); d.go({ type: "print" }); d.go({ type: "animEnd" });
+    setAll(d, { arm: "flat" }); // 改成不同組合
+    d.t = d.st.cooldownUntil - 1; eq(d.go({ type: "print" }).kind, "cooldown");
+    d.t = d.st.cooldownUntil; eq(d.go({ type: "print" }).kind, "fail");
+  });
+
+  /* ---------- 4 不具能力者想靠猜 ---------- */
+  T("T4-1 窮舉：每次失敗冷卻 3 秒；第 5 次失敗鎖機；回饋不洩漏", () => {
+    const d = reachC2(); const fails = combos().filter((s) => !isWin(s));
+    for (let i = 0; i < 5; i++) {
+      setAll(d, fails[i]); const before = d.t; d.go({ type: "print" });
+      eq(d.fb.kind, "fail", "第 " + (i + 1) + " 次"); eq(d.st.failCount, i + 1);
+      eq(d.st.cooldownUntil, before + C.timing.animMs + C.timing.cooldownMs);
+      afterCooldown(d);
+    }
+    ok(d.st.locked, "第 5 次失敗後應鎖機");
+    setAll(d, fails[5]); eq(d.fb.kind, "locked");
+    eq(d.go({ type: "print" }).kind, "locked");
+    ok(!d.st.completed);
+  });
+  T("T4-2 冷卻中按開始：不執行、不加次數", () => {
+    const d = reachC2(); d.go({ type: "print" }); d.go({ type: "animEnd" }); setAll(d, { arm: "flat" });
+    const n = d.st.failCount; d.go({ type: "print" }); eq(d.fb.kind, "cooldown"); ok(d.fb.leftMs > 0); eq(d.st.failCount, n);
+  });
+  T("T4-3 重送同一組失敗設定：被擋、不計次數", () => {
+    const d = reachC2(); d.go({ type: "print" }); afterCooldown(d);
+    d.go({ type: "print" }); eq(d.fb.kind, "repeat"); eq(d.st.failCount, 1);
+  });
+  T("T4-4 鎖機與解鎖：PIN 錯誤不解、正確才解；解鎖後失敗計數重新累計", () => {
+    const d = reachC2(); const fails = combos().filter((s) => !isWin(s));
+    for (let i = 0; i < 5; i++) { setAll(d, fails[i]); d.go({ type: "print" }); afterCooldown(d); }
+    ok(d.st.locked);
+    eq(d.go({ type: "unlock", pin: "0000" }).kind, "badPin"); ok(d.st.locked);
+    eq(d.go({ type: "unlock", pin: C.masterPin }).kind, "unlocked"); ok(!d.st.locked); eq(d.st.failsSinceUnlock, 0); eq(d.st.failCount, 5);
+    setAll(d, fails[5]); d.go({ type: "print" }); eq(d.fb.kind, "fail"); ok(!d.st.locked);
+  });
+
+  /* ---------- 5 還沒拿到資訊就想作答 ---------- */
+  T("T5-1 教學未完成就要列印：拒絕", () => {
+    ["intro", "A", "B1", "B2"].forEach((p) => { const d = toPhase(p); eq(d.go({ type: "print" }).kind, "needTutorial", p); ok(!d.st.completed); });
+  });
+  T("T5-2 診斷未完成就列印：不成功並引導做診斷", () => {
+    const d = toPhase("C1"); eq(d.go({ type: "print" }).kind, "needC1"); ok(!d.st.completed);
+    eq(d.go({ type: "set", key: "arm", value: "flat" }).kind, "badPhase");
+  });
+  T("T5-3 只標弱點沒選原因：診斷未完成", () => {
+    const d = toPhase("C1"); VIEWS.forEach((v) => d.go({ type: "c1View", view: v }));
+    WEAK.forEach((p) => d.go({ type: "c1Mark", part: p })); d.go({ type: "c1Check" }); eq(d.fb.kind, "needReason");
+    eq(d.go({ type: "c1Reason", part: "arm", option: wrongId("arm") }).kind, "reasonWrong");
+    d.go({ type: "c1Reason", part: "foot", option: correctId("foot") }); d.go({ type: "c1Check" }); eq(d.fb.kind, "wrongReason"); eq(d.st.phase, "C1");
+  });
+
+  /* ---------- 6 只完成一部分 ---------- */
+  T("T6-1 只改手臂：列印✔、落摔✘，手臂設定保留", () => {
+    const d = reachC2(); d.go({ type: "set", key: "arm", value: "flat" }); d.go({ type: "print" });
+    eq([d.fb.result.printOk, d.fb.result.dropOk], [true, false]); eq(d.st.set.arm, "flat");
+  });
+  T("T6-2 診斷只標 1 個：未完成，只說還差幾個，已標保留", () => {
+    const d = toPhase("C1"); VIEWS.forEach((v) => d.go({ type: "c1View", view: v }));
+    d.go({ type: "c1Mark", part: "arm" }); d.go({ type: "c1Reason", part: "arm", option: correctId("arm") });
+    d.go({ type: "c1Check" }); eq(d.fb.kind, "missingMarks"); eq(d.fb.count, 1); eq(d.st.c1.marks.arm, true); eq(d.st.c1.reasons.arm, correctId("arm"));
+    ok(d.fb.part === undefined, "不應直接說出缺哪個部位");
+  });
+  T("T6-3 B2 沒過就進 C1：拒絕", () => {
+    const d = toPhase("B2"); eq(d.go({ type: "c1View", view: "front" }).kind, "badPhase");
+    eq(d.go({ type: "b2Run" }).kind, "b2fail"); eq(d.st.phase, "B2");
+    d.go({ type: "b2Set", key: "orient", value: "flat" }); d.go({ type: "b2Set", key: "support", value: "on" });
+    eq(d.go({ type: "b2Run" }).code, "waste"); eq(d.st.phase, "B2");
+    d.go({ type: "b2Set", key: "support", value: "off" }); eq(d.go({ type: "b2Run" }).kind, "b2ok"); eq(d.st.phase, "C1");
+  });
+
+  /* ---------- 7 連續快速重複操作 ---------- */
+  T("T7-1 開關連點 10 次：結果等同慢慢點", () => {
+    const fast = reachC2(); const slow = reachC2();
+    for (let i = 0; i < 10; i++) { fast.go({ type: "toggle", key: "support" }); }
+    for (let i = 0; i < 10; i++) { slow.go({ type: "toggle", key: "support" }, 500); }
+    eq(fast.st.set, slow.st.set); eq(fast.st.set.support, "off");
+    for (let i = 0; i < 10; i++) fast.go({ type: "set", key: "arm", value: "flat" }); eq(fast.st.set.arm, "flat");
+  });
+  T("T7-2 失敗組合連按開始 10 次：只執行 1 次", () => {
+    const d = reachC2(); const kinds = []; for (let i = 0; i < 10; i++) kinds.push(d.go({ type: "print" }).kind);
+    eq(kinds[0], "fail"); ok(kinds.slice(1).every((k) => k === "busy")); eq(d.st.failCount, 1);
+  });
+  T("T7-3 正確組合連按開始 10 次：成功只觸發 1 次", () => {
+    const d = reachC2(); setAll(d, SOLVE); const kinds = []; for (let i = 0; i < 10; i++) kinds.push(d.go({ type: "print" }).kind);
+    eq(kinds.filter((k) => k === "success").length, 1); ok(kinds.slice(1).every((k) => k === "busy")); eq(d.st.failCount, 0);
+  });
+  T("T7-4 示範卡「下一張」連點 10 次：未滿時間不前進，滿了只前進一張", () => {
+    const d = toPhase("A"); for (let i = 0; i < 10; i++) d.go({ type: "aNext" }); eq(d.st.aIdx, 0); eq(d.fb.kind, "tooEarly");
+    d.t += C.timing.demoMs; for (let i = 0; i < 10; i++) d.go({ type: "aNext" }); eq(d.st.aIdx, 1);
+  });
+  T("T7-5 熱區連點 10 次：結果等同慢慢點（偶數次＝未標）", () => {
+    const a = toPhase("C1"), b = toPhase("C1");
+    for (let i = 0; i < 10; i++) a.go({ type: "c1Mark", part: "arm" });
+    for (let i = 0; i < 10; i++) b.go({ type: "c1Mark", part: "arm" }, 700);
+    eq(a.st.c1, b.st.c1); eq(a.st.c1.marks.arm, false);
+  });
+
+  /* ---------- 8 成功之後又再操作 ---------- */
+  const solved = () => { const d = reachC2(); setAll(d, SOLVE); d.go({ type: "print" }); d.go({ type: "animEnd" }); return d; };
+  T("T8-1 成功後再按開始：只重播，不重複成功，也不變錯誤", () => {
+    const d = solved(); const snap = JSON.stringify({ c: d.st.completed, f: d.st.failCount, p: d.st.phase });
+    const k = []; for (let i = 0; i < 5; i++) k.push(d.go({ type: "print" }).kind);
+    eq(k[0], "replay"); ok(k.slice(1).every((x) => x === "busy"));
+    d.go({ type: "animEnd" }); eq(d.go({ type: "print" }).kind, "replay"); d.go({ type: "animEnd" });
+    eq(JSON.stringify({ c: d.st.completed, f: d.st.failCount, p: d.st.phase }), snap);
+  });
+  T("T8-2 成功後改開關：被拒絕", () => {
+    const d = solved(); eq(d.go({ type: "set", key: "arm", value: "stand" }).kind, "completed"); eq(d.go({ type: "resetSet" }).kind, "completed");
+    eq(d.go({ type: "toggle", key: "support" }).kind, "completed"); eq(d.st.set, SOLVE); ok(d.st.completed);
+  });
+  T("T8-3 成功後再看一次訊息：內容相同，仍是已完成", () => {
+    const d = solved(); const a = d.go({ type: "showSuccess" }).success; const b = d.go({ type: "showSuccess" }).success;
+    eq(a, b); eq(a.code, C.groupCodes[0]); ok(d.st.completed);
+    eq(d.go({ type: "review", q: 0, option: "r1" }).correct, true); eq(d.go({ type: "review", q: 0, option: "r2" }).correct, false);
+    eq(reachC2().go({ type: "showSuccess" }).kind, "notDone");
+  });
+
+  /* ---------- 9 重新整理或中途離開 ---------- */
+  T("T9-1 中途還原：保留教學進度、診斷、失敗次數；參數回預設；不是成功", () => {
+    const d = reachC2(); setAll(d, { arm: "flat" }); d.go({ type: "print" }); d.go({ type: "animEnd" });
+    const r = L.restore(L.serialize(d.st), d.t + 100, 5);
+    eq(r.phase, "C2"); eq(r.failCount, 1); eq(r.tried, d.st.tried); eq(r.c1, d.st.c1); eq(r.set, C.defaults); ok(!r.completed); ok(!r.animating);
+    const m = toPhase("C1"); m.go({ type: "c1Mark", part: "arm" }); const r2 = L.restore(L.serialize(m.st), m.t, 5);
+    eq(r2.phase, "C1"); eq(r2.c1.marks.arm, true);
+  });
+  T("T9-2 冷卻中還原：冷卻依結束時間續算，不會歸零", () => {
+    const d = reachC2(); d.go({ type: "print" });
+    const r = L.restore(L.serialize(d.st), d.t + 4000, 5);
+    eq(L.cooldownLeft(r, d.t + 4000), C.timing.animMs + C.timing.cooldownMs - 4000);
+    setAll({ go: (a) => (L.reduce(r, a, d.t + 4000)) }, {});
+    const x = L.reduce(Object.assign({}, r, { set: { support: "off", arm: "flat", foot: "thin" } }), { type: "print" }, d.t + 4000);
+    eq(x.fb.kind, "cooldown");
+  });
+  T("T9-3 動畫中重整：失敗已計、冷卻保留、不顯示成功", () => {
+    const d = reachC2(); d.go({ type: "print" }); ok(d.st.animating);
+    const r = L.restore(L.serialize(d.st), d.t + 50, 5);
+    eq(r.failCount, 1); ok(!r.animating && !r.completed); ok(r.cooldownUntil > d.t + 50); eq(r.phase, "C2");
+  });
+  T("T9-4 已完成還原：仍是已完成，代碼可再看", () => {
+    const d = solved(); const r = L.restore(L.serialize(d.st), d.t, 5);
+    ok(r.completed); eq(r.phase, "done"); eq(L.reduce(r, { type: "showSuccess" }, d.t).fb.success.code, C.groupCodes[0]);
+  });
+  T("T9-4b 鎖機狀態還原：仍鎖著", () => {
+    const d = reachC2(); const fails = combos().filter((s) => !isWin(s));
+    for (let i = 0; i < 5; i++) { setAll(d, fails[i]); d.go({ type: "print" }); afterCooldown(d); }
+    ok(L.restore(L.serialize(d.st), d.t, 5).locked);
+  });
+  T("T9-5 存檔壞掉或被改亂：回到初始，不拋錯；storage 例外退回記憶體", () => {
+    const fresh = JSON.stringify(L.initial(1, 5));
+    ["{壞掉", "null", "", "[]", '{"v":1}', JSON.stringify({ v: 1, group: 99 })].forEach((j) => eq(JSON.stringify(L.restore(j, T0, 5)), fresh, "存檔：" + j));
+    const sneaky = JSON.parse(L.serialize(solved().st)); sneaky.completed = false;
+    eq(JSON.stringify(L.restore(JSON.stringify(sneaky), T0, 5)), fresh, "phase 與 completed 不一致");
+    const sneaky2 = JSON.parse(L.serialize(reachC2().st)); sneaky2.completed = true;
+    eq(JSON.stringify(L.restore(JSON.stringify(sneaky2), T0, 5)), fresh, "未完成卻宣稱已完成");
+    const bad = { getItem() { throw new Error("x"); }, setItem() { throw new Error("x"); }, removeItem() { throw new Error("x"); } };
+    const s = L.makeStore(bad, "k"); s.set("abc"); eq(s.get(), "abc"); ok(s.usingMemory); s.del(); eq(s.get(), null);
+    const s2 = L.makeStore(null, "k"); s2.set("z"); eq(s2.get(), "z");
+  });
+
+  /* ---------- 10 求助 ---------- */
+  T("T10-1 提示依序解鎖：直接要第 2、3 層也只給第 1 層", () => {
+    const d = reachC2(); eq(d.go({ type: "hint", level: 3 }).level, 1); eq(d.go({ type: "hint", level: 3 }).level, 2); eq(d.go({ type: "hint", level: 3 }).level, 3);
+    const e = reachC2(); eq([1, 2, 3].map(() => e.go({ type: "hint" }).level), [1, 2, 3]);
+  });
+  T("T10-2 提示不含答案（預設）：不含選項名稱，也不含任何代碼", () => {
+    ["A", "B1", "B2", "C1", "C2"].forEach((stg) => C.hints[stg].forEach((t) => FORBID().forEach((w) => ok(!t.includes(w), stg + " 提示含「" + w + "」"))));
+    const d = reachC2(); [1, 2, 3].forEach(() => d.go({ type: "hint" }));
+    C.hints.C2.forEach((t) => ok(!(t.includes("平躺") && t.includes("加寬")), "同時含兩個正確選項"));
+    ok(!C.hint3Explicit, "預設應為不直接給答案");
+  });
+  T("T10-3 提示用完再按：重複顯示第 3 層，不報錯，並記錄用量", () => {
+    const d = reachC2(); for (let i = 0; i < 3; i++) d.go({ type: "hint" });
+    const f = d.go({ type: "hint" }); eq(f.level, 3); ok(f.ok); eq(d.st.hintsUsed, 4);
+  });
+  T("T10-4 提示可依關卡給：各階段都有 3 層；完成後不再給", () => {
+    ["A", "B1", "B2", "C1", "C2"].forEach((p) => { const d = toPhase(p); eq(d.go({ type: "hint" }).stage, p); });
+    eq(solved().go({ type: "hint" }).kind, "noHint");
+    const x = reachC2(); x.st.hintSeen.C2 = 2; C.hint3Explicit = true; const t = x.go({ type: "hint" }).text; C.hint3Explicit = false;
+    eq(t, C.hints.C2explicit);
+  });
+
+  /* ---------- 11 重置 ---------- */
+  T("T11-1 關主重來：任何前置狀態都清空回開頭，並可換組別", () => {
+    [solved(), reachC2(), toPhase("C1"), (() => { const d = reachC2(); const f = combos().filter((s) => !isWin(s)); for (let i = 0; i < 5; i++) { setAll(d, f[i]); d.go({ type: "print" }); afterCooldown(d); } return d; })()].forEach((d) => {
+      d.go({ type: "reset", pin: C.masterPin, group: 3, seed: 9 });
+      eq(JSON.stringify(d.st), JSON.stringify(L.initial(3, 9)));
+    });
+  });
+  T("T11-2 PIN 錯誤：不重置", () => {
+    const d = solved(); const before = JSON.stringify(d.st); eq(d.go({ type: "reset", pin: "1111" }).kind, "badPin"); eq(JSON.stringify(d.st), before);
+  });
+  T("T11-3 重來後下一組可完整重玩並成功，且代碼不同", () => {
+    const d = solved(); const code1 = d.go({ type: "showSuccess" }).success.code;
+    d.go({ type: "reset", pin: C.masterPin, group: 2, seed: 3 });
+    const e = drive(d.st, d.t);
+    e.go({ type: "start" }); for (let i = 0; i < C.demo.length; i++) e.go({ type: "aNext" }, C.timing.demoMs);
+    e.go({ type: "b1Set", angle: 45 }); e.go({ type: "b1Confirm" }); e.go({ type: "b2Set", key: "orient", value: "flat" }); e.go({ type: "b2Run" });
+    VIEWS.forEach((v) => e.go({ type: "c1View", view: v })); WEAK.forEach((p) => { e.go({ type: "c1Mark", part: p }); e.go({ type: "c1Reason", part: p, option: correctId(p) }); });
+    e.go({ type: "c1Check" }); setAll(e, SOLVE); e.go({ type: "print" });
+    eq(e.fb.kind, "success"); eq(e.st.failCount, 0); ok(e.fb.success.code !== code1, "第 2 組代碼應與第 1 組不同");
+  });
+
+  /* ---------- 12–15 老師另外擔心的意外 ---------- */
+  T("T12 預設參數直接開始：雙階段皆 ✘", () => {
+    const d = reachC2(); d.go({ type: "print" }); eq(d.fb.kind, "fail"); eq([d.fb.result.printCode, d.fb.result.dropCode], ["collapse", "ankleBreak"]);
+  });
+  T("T13 動畫中連點設定與重設：全被拒，狀態不變；動畫結束後恢復", () => {
+    const d = reachC2(); d.go({ type: "print" }); const before = JSON.stringify(d.st.set);
+    for (let i = 0; i < 6; i++) { eq(d.go({ type: "toggle", key: "arm" }).kind, "busy"); eq(d.go({ type: "resetSet" }).kind, "busy"); eq(d.go({ type: "set", key: "foot", value: "wide" }).kind, "busy"); }
+    eq(JSON.stringify(d.st.set), before); d.go({ type: "animEnd" }); eq(d.go({ type: "toggle", key: "arm" }).kind, "set");
+  });
+  T("T14 超過 4 次錯誤嘗試：第 5 次鎖機", () => {
+    const d = reachC2(); const f = combos().filter((s) => !isWin(s)); const locks = [];
+    for (let i = 0; i < 5; i++) { setAll(d, f[i]); d.go({ type: "print" }); locks.push(d.st.locked); afterCooldown(d); }
+    eq(locks, [false, false, false, false, true]);
+  });
+  T("T15 成功後因好玩重複點列印：代碼不消失，可重播", () => {
+    const d = solved(); d.go({ type: "print" }); eq(d.fb.kind, "replay"); eq(d.fb.success.code, C.groupCodes[0]); d.go({ type: "animEnd" });
+    eq(d.go({ type: "showSuccess" }).success.code, C.groupCodes[0]);
+  });
+
+  /* ---------- 技術要點 ---------- */
+  T("T-隨機 診斷與回顧選項洗牌：100 個種子，正解必在、數量固定、順序隨機", () => {
+    const orders = new Set();
+    for (let seed = 1; seed <= 100; seed++) {
+      const st = L.initial(1, seed);
+      WEAK.forEach((p) => { const o = L.reasonOptions(st, p); eq(o.length, 4); ok(o.some((x) => x.id === correctId(p)), "缺正解"); eq(new Set(o.map((x) => x.id)).size, 4); orders.add(p + o.map((x) => x.id).join()); });
+      C.review.forEach((q, i) => { const o = L.reviewOptions(st, i); eq(o.length, q.options.length); ok(o.some((x) => q.options.find((y) => y.id === x.id).correct)); });
+    }
+    ok(orders.size > 4, "順序看起來沒有變化");
+    const st = L.initial(1, 42); eq(L.reasonOptions(st, "arm"), L.reasonOptions(st, "arm"), "同種子順序必須固定");
+  });
+  T("T-初始 預設不是解、初始不是已完成", () => {
+    ok(!same(C.defaults, C.answer), "預設不可等於答案"); ok(!L.evaluate(C.defaults).success);
+    const s = L.initial(1, 1); ok(!s.completed && s.phase === "intro" && s.failCount === 0);
+    ok(!(C.flag.defaults.support === "off" && C.flag.defaults.orient === "flat"), "小旗子預設不可已解");
+    for (let seed = 1; seed <= 50; seed++) { const x = L.initial(1, seed); ok(!L.evaluate(x.set).success && !L.evalFlag(x.b2).ok); }
+  });
+  T("T-跳脫 玩家會看到的文字先跳脫", () => {
+    const out = L.esc("<img src=x onerror=alert(1)>&\"'`");
+    ok(!/[<>"'`]/.test(out) && out.includes("&lt;img") && out.includes("&amp;"), out);
+    eq(L.esc(450), "450");
+  });
+  T("T-每組不同 各組代碼互不相同；組別超出範圍回到第 1 組；代碼成功前不外洩", () => {
+    eq(new Set(C.groupCodes).size, C.groupCodes.length); ok(C.groupCodes.every((c) => /^\d{3}$/.test(c)));
+    eq(L.initial(0, 1).group, 1); eq(L.initial(999, 1).group, 1); eq(L.initial(4, 1).group, 4);
+    C.groupCodes.forEach((code, i) => { const d = reachC2(i + 1); setAll(d, SOLVE); d.go({ type: "print" }); eq(d.fb.success.code, code); ok(d.fb.success.next.includes(code)); });
+    const d = reachC2(2); const blob = JSON.stringify(d.st); C.groupCodes.forEach((c) => ok(!blob.includes('"' + c + '"'), "狀態不應直接帶著代碼"));
+  });
+  T("T-CONFIG 檢查：答案、提示、代碼、秒數都合理", () => {
+    eq(C.answer, SOLVE); ok(L.evaluate(C.answer).success);
+    ["A", "B1", "B2", "C1", "C2"].forEach((k) => eq(C.hints[k].length, 3, "提示層數 " + k));
+    ok(C.timing.cooldownMs >= 0 && C.timing.demoMs >= 0 && C.timing.lockAfter >= 1 && C.timing.animMs > 0);
+    eq(C.demo.length, L.consts.CARDS); ok(C.demo.length >= 4, "示範卡應含接合那一張"); ok(C.review.length >= 1); ok(/^\d{4}$/.test(C.masterPin));
+    WEAK.forEach((p) => eq(C.c1.reasons[p].filter((o) => o.correct).length, 1, "每題恰有一個正解"));
+    eq(C.b1.critical, 45);
+  });
+  T("T-reduce 純函式：不改動傳入的狀態", () => {
+    const d = reachC2(); const snap = JSON.stringify(d.st);
+    ["print", "toggle", "resetSet", "hint", "animEnd"].forEach((t) => L.reduce(d.st, { type: t, key: "arm" }, d.t)); eq(JSON.stringify(d.st), snap);
+    eq(L.reduce(d.st, { type: "不存在" }, d.t).fb.kind, "unknown");
+  });
+
+
+  /* ---------- 接合知識（做法 A：只補知識，判定不變） ---------- */
+  T("T-接合1 示範卡：走完全部卡片才進入練習，且每張都要看滿時間", () => {
+    const d = toPhase("A"); const n = C.demo.length;
+    for (let i = 0; i < n - 1; i++) { d.go({ type: "aNext" }, C.timing.demoMs); eq(d.st.phase, "A"); eq(d.st.aIdx, i + 1); }
+    eq(d.go({ type: "aNext" }).kind, "tooEarly"); d.go({ type: "aNext" }, C.timing.demoMs); eq(d.st.phase, "B1");
+  });
+  T("T-接合2 還原：停在最後一張示範卡也能正確還原", () => {
+    const d = toPhase("A"); for (let i = 0; i < C.demo.length - 1; i++) d.go({ type: "aNext" }, C.timing.demoMs);
+    const r = L.restore(L.serialize(d.st), d.t, 5); eq(r.phase, "A"); eq(r.aIdx, C.demo.length - 1);
+  });
+  T("T-接合3 內容：最後一張示範卡講卡榫、黏合、公差；手臂選項點出接合；回顧題有接合題", () => {
+    const last = C.demo[C.demo.length - 1].body; ["卡榫", "黏合", "公差"].forEach((w) => ok(last.includes(w), "示範卡缺「" + w + "」"));
+    ok(/卡榫|黏合/.test(C.labels.arm.flat) && /卡榫|黏合/.test(C.labels.orient.flat), "選項文字應提到接合");
+    const q = C.review.find((r) => r.q.includes("接合")); ok(q, "缺接合回顧題"); eq(q.options.filter((o) => o.correct).length, 1);
+  });
+  T("T-接合4 判定不變：加了接合知識後，成功條件只有兩種可行做法（都要加寬）", () => {
+    eq(C.answer, SOLVE); eq(C.answerAlt, SOLVE_B); let wins = 0; combos().forEach((set) => { if (L.evaluate(set).success) wins++; }); eq(wins, 2);
+  });
+
+  /* ---------- 執行與顯示 ---------- */
+  function run() {
+    return list.map((t) => { try { t.fn(); return { name: t.name, pass: true }; } catch (e) { return { name: t.name, pass: false, err: String((e && e.message) || e) }; } });
+  }
+  function render(root) {
+    const res = run(); const bad = res.filter((r) => !r.pass).length;
+    const box = document.createElement("details"); box.open = true; box.className = "testpanel";
+    const sum = document.createElement("summary"); sum.textContent = "自動測試：" + (res.length - bad) + " / " + res.length + " 通過" + (bad ? "（有 " + bad + " 項失敗）" : " ✔"); sum.className = bad ? "bad" : "good";
+    box.appendChild(sum);
+    const ul = document.createElement("ul");
+    res.forEach((r) => { const li = document.createElement("li"); li.className = r.pass ? "good" : "bad"; li.textContent = (r.pass ? "通過 ✔　" : "失敗 ✘　") + r.name + (r.err ? " → " + r.err : ""); ul.appendChild(li); });
+    box.appendChild(ul); root.prepend(box); return res;
+  }
+  return { list, run, render };
+})();
+
+</script>
+<script id="art">
+/* =====================================================================
+   呈現層（一）：SVG 圖像。只負責畫，不做任何判定。
+   數字都來自 CONFIG；進到 innerHTML 的動態值一律先過 Logic.esc 或確定是數字
+   ===================================================================== */
+const Art = (() => {
+  "use strict";
+  const C = CONFIG, esc = Logic.esc;
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const ease = (x) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
+  const f1 = (n) => Math.round(n * 10) / 10;
+
+  /* ---------- 三視圖（C1）：part 有 data-part，可點選 ---------- */
+  function robotView(view) {
+    const r = C.robot;
+    const g = (part, inner) => `<g class="part" data-part="${part}" tabindex="0" role="button" aria-label="${esc(C.c1.parts[part].name)}">${inner}</g>`;
+    if (view === "front") {
+      return `<svg viewBox="0 0 300 310" class="view3" role="img" aria-label="${esc(C.c1.viewText.front)}">
+  <line x1="20" y1="280" x2="280" y2="280" class="ground"/>
+  ${g("foot", `<rect class="hit" x="112" y="215" width="76" height="70"/><rect class="solid" x="128" y="225" width="8" height="53" rx="2"/><rect class="solid" x="164" y="225" width="8" height="53" rx="2"/><rect class="solid" x="126" y="277" width="12" height="3"/><rect class="solid" x="162" y="277" width="12" height="3"/>`)}
+  ${g("body", `<rect class="solid" x="112" y="135" width="76" height="92" rx="8"/><rect class="accent" x="138" y="162" width="24" height="16" rx="3"/>`)}
+  ${g("head", `<rect class="solid" x="124" y="92" width="52" height="40" rx="12"/><circle class="led" cx="138" cy="112" r="4"/><circle class="led" cx="162" cy="112" r="4"/><line class="solid" x1="150" y1="92" x2="150" y2="78"/><circle class="led" cx="150" cy="75" r="4"/>`)}
+  ${g("arm", `<rect class="hit" x="50" y="140" width="62" height="32"/><rect class="hit" x="188" y="140" width="62" height="32"/><rect class="solid" x="64" y="150" width="48" height="12" rx="3"/><rect class="solid" x="188" y="150" width="48" height="12" rx="3"/><circle class="solid" cx="62" cy="156" r="7"/><circle class="solid" cx="238" cy="156" r="7"/>`)}
+  <line x1="188" y1="162" x2="188" y2="232" class="dash"/><line x1="188" y1="162" x2="236" y2="162" class="dim"/>
+  <path d="M188 214 A52 52 0 0 0 200 211" class="arc" fill="none"/><text x="204" y="226" class="note">${esc(r.armAngle)}°</text>
+  <text x="150" y="304" class="cap" text-anchor="middle">前視圖</text></svg>`;
+    }
+    if (view === "side") {
+      return `<svg viewBox="0 0 300 310" class="view3" role="img" aria-label="${esc(C.c1.viewText.side)}">
+  <line x1="20" y1="280" x2="280" y2="280" class="ground"/>
+  ${g("foot", `<rect class="hit" x="128" y="215" width="44" height="70"/><rect class="solid" x="146" y="225" width="8" height="53" rx="2"/><rect class="solid" x="144" y="277" width="12" height="3"/>`)}
+  ${g("body", `<rect class="solid" x="125" y="135" width="50" height="92" rx="8"/><rect class="accent" x="143" y="162" width="14" height="16" rx="3"/>`)}
+  ${g("head", `<rect class="solid" x="130" y="92" width="40" height="40" rx="12"/><circle class="led" cx="160" cy="112" r="4"/><line class="solid" x1="150" y1="92" x2="150" y2="78"/><circle class="led" cx="150" cy="75" r="4"/>`)}
+  ${g("arm", `<circle class="hit" cx="150" cy="156" r="22" fill="transparent"/><circle class="solid" cx="150" cy="156" r="8"/>`)}
+  <text x="150" y="184" class="note" text-anchor="middle" font-size="11">手臂（只看到截面）</text>
+  <line x1="222" y1="75" x2="222" y2="280" class="dim"/><line x1="214" y1="75" x2="230" y2="75" class="dim"/><line x1="214" y1="280" x2="230" y2="280" class="dim"/>
+  <text x="232" y="182" class="note">機身高</text><text x="232" y="200" class="note">${esc(r.heightMm)} mm</text>
+  <path d="M138 290 L138 295 L162 295 L162 290" class="dim" fill="none"/><text x="150" y="308" class="note" text-anchor="middle" font-size="12">腳底接觸 Ø${esc(r.footMm)} mm</text></svg>`;
+    }
+    return `<svg viewBox="0 0 300 310" class="view3" role="img" aria-label="${esc(C.c1.viewText.top)}">
+  <rect x="30" y="20" width="240" height="250" rx="10" class="bed2"/><text x="150" y="288" class="cap" text-anchor="middle">俯視圖（從上往下看）</text>
+  ${g("arm", `<rect class="hit" x="40" y="118" width="80" height="44"/><rect class="hit" x="180" y="118" width="80" height="44"/><rect class="solid" x="60" y="134" width="56" height="12" rx="3"/><rect class="solid" x="184" y="134" width="56" height="12" rx="3"/>`)}
+  ${g("body", `<rect class="solid" x="115" y="115" width="70" height="50" rx="8"/>`)}
+  ${g("head", `<rect class="solid" x="128" y="121" width="44" height="38" rx="12"/><circle class="led" cx="140" cy="140" r="3.5"/><circle class="led" cx="160" cy="140" r="3.5"/>`)}
+  ${g("foot", `<circle class="hit" cx="150" cy="230" r="26" fill="transparent"/><circle class="contact" cx="150" cy="230" r="4"/>`)}
+  <line x1="150" y1="165" x2="150" y2="224" class="dash"/>
+  <text x="150" y="212" class="note" text-anchor="middle" font-size="12">腳底接觸面</text>
+  <text x="150" y="255" class="note" text-anchor="middle" font-size="12">虛線小圓 Ø${esc(r.footMm)} mm</text></svg>`;
+  }
+
+  /* ---------- A 示範卡的動畫圖 ---------- */
+  function demoSVG(i) {
+    if (i === 0) {
+      const mk = (rx, ry, th, len, cls, label, tcls, droop) => {
+        const rad = (th * Math.PI) / 180, ex = f1(rx + len * Math.sin(rad)), ey = f1(ry - len * Math.cos(rad));
+        return `<g><rect class="solid" x="${rx - 28}" y="80" width="28" height="90"/>
+        <line class="dash" x1="${rx}" y1="${ry}" x2="${rx}" y2="${ry - 70}"/>
+        <line class="ledge ${cls}" x1="${rx}" y1="${ry}" x2="${ex}" y2="${ey}" ${droop ? `style="transform-origin:${rx}px ${ry}px"` : ""}/>
+        <text x="${rx + 8}" y="${ry - 52}" class="note">${th}°</text>
+        <text x="${rx - 26}" y="192" class="${tcls}" font-size="14">${label}</text></g>`;
+      };
+      return `<svg viewBox="0 0 360 200" class="demo" role="img" aria-label="懸空角度示範"><line x1="10" y1="170" x2="350" y2="170" class="ground"/>
+        ${mk(96, 118, 30, 70, "ok-ledge", "✔ 可以直接印", "okt", false)}${mk(266, 118, 70, 70, "bad-ledge droop", "✘ 會垂落", "badt", true)}</svg>`;
+    }
+    if (i === 1) {
+      return `<svg viewBox="0 0 360 200" class="demo" role="img" aria-label="支撐材示範"><line x1="10" y1="170" x2="350" y2="170" class="ground"/>
+        <rect class="solid" x="50" y="50" width="26" height="120"/>
+        <path class="lattice" d="M96 170 L116 108 L136 170 L156 108 L176 170 L196 108 L216 170 L236 108 L256 170"/>
+        <g class="armfall" style="transform-origin:76px 100px"><rect class="solid" x="76" y="94" width="190" height="14" rx="3"/></g>
+        <path class="crack" d="M72 90 L82 100 L74 106 L84 116"/>
+        <text x="100" y="40" class="note">支撐材像鷹架：能撐住，但拆的時候…</text><text x="150" y="192" class="badt" font-size="14">細長零件拆支撐時容易斷</text></svg>`;
+    }
+    if (i === 2) return `<svg viewBox="0 0 360 200" class="demo" role="img" aria-label="底座示範"><line x1="10" y1="170" x2="350" y2="170" class="ground"/>
+      <g class="wobble" style="transform-origin:100px 170px"><rect class="solid" x="84" y="40" width="32" height="124" rx="4"/><rect class="solid" x="95" y="164" width="10" height="6"/></g>
+      <g class="steady"><rect class="solid" x="244" y="50" width="32" height="104" rx="4"/><polygon class="solid" points="244,154 276,154 306,170 214,170"/></g>
+      <text x="40" y="192" class="badt" font-size="14">✘ 接觸面積小，站不穩</text><text x="206" y="192" class="okt" font-size="14">✔ 加寬底座，穩</text></svg>`;
+    return `<svg viewBox="0 0 360 200" class="demo" role="img" aria-label="接合示範：卡榫與黏合">
+      <text x="92" y="26" class="note" text-anchor="middle" font-size="15">卡榫（嵌入）</text><text x="272" y="26" class="note" text-anchor="middle" font-size="15">黏合</text>
+      <line x1="180" y1="38" x2="180" y2="186" class="dim"/>
+      <rect class="solid" x="20" y="70" width="46" height="90" rx="4"/><rect class="hole" x="56" y="106" width="10" height="20"/>
+      <g class="slidein"><rect class="solid" x="92" y="100" width="62" height="32" rx="4"/><rect class="peg" x="76" y="108" width="16" height="16"/></g>
+      <text x="92" y="184" class="okt" text-anchor="middle" font-size="12">孔要比榫頭多留一點公差</text>
+      <rect class="solid" x="196" y="70" width="46" height="90" rx="4"/><rect class="glue" x="242" y="96" width="8" height="40"/>
+      <g class="slidein2"><rect class="solid" x="250" y="96" width="82" height="40" rx="4"/></g>
+      <text x="272" y="184" class="okt" text-anchor="middle" font-size="12">接觸面積越大越牢</text></svg>`;
+  }
+
+  /* ---------- B1：角度實驗 ---------- */
+  function b1Markup(angle) {
+    const rx = 100, ry = 130, L = 100, th = clamp(angle, 0, 90), rad = (th * Math.PI) / 180;
+    const ex = f1(rx + L * Math.sin(rad)), ey = f1(ry - L * Math.cos(rad));
+    const rad45 = Math.PI / 4, x45 = f1(rx + L * Math.sin(rad45)), y45 = f1(ry - L * Math.cos(rad45));
+    const bad = th > C.b1.critical;
+    let ledge;
+    if (!bad) ledge = `<line class="ledge ok-ledge" x1="${rx}" y1="${ry}" x2="${ex}" y2="${ey}"/>`;
+    else {
+      const k = clamp((th - C.b1.critical) / (C.b1.max - C.b1.critical), 0, 1), pts = [];
+      for (let i = 0; i <= 14; i++) { const u = i / 14; pts.push(`${f1(rx + (ex - rx) * u)},${f1(ry + (ey - ry) * u + k * 50 * u * u + Math.sin(u * 11) * 5 * u)}`); }
+      ledge = `<polyline class="noodle" points="${pts.join(" ")}"/>`;
+    }
+    return `<svg viewBox="0 0 360 230" class="demo b1" role="img" aria-label="懸空角度實驗">
+      <line x1="10" y1="205" x2="350" y2="205" class="ground"/><rect class="solid" x="${rx - 32}" y="${ry}" width="32" height="${205 - ry}"/>
+      <line class="dash" x1="${rx}" y1="${ry}" x2="${rx}" y2="30"/>
+      <line class="ref45" x1="${rx}" y1="${ry}" x2="${x45}" y2="${y45}"/><text x="${x45 + 6}" y="${y45 + 4}" class="note" font-size="12">45°</text>
+      ${ledge}<text x="${rx + 14}" y="62" class="note" font-size="16">θ = ${th}°</text>
+      <text x="200" y="210" class="${bad ? "badt" : "okt"}" font-size="15" text-anchor="middle" id="b1verdict" display="none"></text></svg>`;
+  }
+
+  /* ---------- 列印模擬台（C2、B2 共用） ---------- */
+  const GY = 250, CX = 180, W = 360;
+  function armSpec(model) {
+    return model === "flag" ? { sides: [1], len: 84, y: GY - 122, rootX: CX + 8, th: 14, H: 130 } : { sides: [-1, 1], len: 46, y: GY - 140, rootX: null, th: 12, H: 210 };
+  }
+  function armRect(sp, side, kind, k) {
+    const rootX = sp.rootX != null ? sp.rootX : CX + side * 34;
+    const ax = side > 0 ? rootX : rootX - sp.len, ay = sp.y - sp.th / 2;
+    const lx = side > 0 ? CX + 96 : CX - 96 - sp.len, ly = GY - sp.th;
+    if (kind === "attached") return [ax, ay];
+    if (kind === "lying") return [lx, ly];
+    return [lerp(lx, ax, k), lerp(ly, ay, k)];
+  }
+  const rectS = (x, y, w, h, cls) => `<rect class="${cls}" x="${f1(x)}" y="${f1(y)}" width="${f1(w)}" height="${f1(h)}" rx="3"/>`;
+  function latticePath(x1, x2, yTop, yBot, n) {
+    let d = `M${f1(x1)} ${f1(yBot)}`;
+    for (let i = 0; i < n; i++) { const xa = x1 + ((x2 - x1) * (i + 0.5)) / n, xb = x1 + ((x2 - x1) * (i + 1)) / n; d += ` L${f1(xa)} ${f1(yTop)} L${f1(xb)} ${f1(yBot)}`; }
+    return d;
+  }
+
+  /* model: "robot"|"flag"；set: {support,arm,foot}；res: {printCode,dropCode,printOk,dropOk}；t: null=預覽，0~1=動畫 */
+  function scene(model, set, res, t, opt) {
+    opt = opt || {};
+    const sp = armSpec(model), H = sp.H, isRobot = model === "robot", hasDrop = isRobot;
+    const preview = t == null, printEnd = hasDrop ? 0.5 : 0.6, postEnd = hasDrop ? 0.58 : 1;
+    const tt = preview ? 1 : t;
+    const pp = preview ? 1 : clamp(tt / printEnd, 0, 1), rh = pp * H;
+    const pk = preview ? 1 : clamp((tt - printEnd) / (postEnd - printEnd), 0, 1);
+    const inPrint = !preview && tt < printEnd, inPost = !preview && tt >= printEnd && (hasDrop ? tt < postEnd : true), inDrop = !preview && hasDrop && tt >= postEnd;
+    const u = inDrop ? clamp((tt - postEnd) / (1 - postEnd), 0, 1) : 0;
+    const code = res ? res.printCode : null;
+    const failedPrint = res && !res.printOk;
+    const pred = inDrop && failedPrint;           // 列印失敗後的落摔只是「預測」
+    const bad = (part) => (!preview && tt >= 1 && res && ((part === "arm" && !res.printOk) || (part === "foot" && !res.dropOk))) ? " bad" : "";
+    let s = "";
+    const cid = "cp" + model;
+    s += `<defs><clipPath id="${cid}"><rect x="0" y="${f1(GY - rh - 2)}" width="${W}" height="${f1(rh + 6)}"/></clipPath></defs>`;
+    s += `<rect class="bed" x="14" y="${GY}" width="${W - 28}" height="14" rx="3"/><text x="${W - 22}" y="${GY + 11}" class="bedt" text-anchor="end">列印板</text>`;
+
+    /* ---- 手臂（或旗面）狀態 ---- */
+    const arms = sp.sides.map((side) => {
+      const rootX = sp.rootX != null ? sp.rootX : CX + side * 34;
+      let kind = "attached", k = 0, extra = "", lattice = "", alpha = 1;
+      const standing = set.arm === "stand";
+      if (preview) { kind = standing ? "attached" : "lying"; }
+      else if (inPrint) {
+        if (standing) {
+          kind = "attached";
+          if (code === "collapse") { const p0 = (GY - sp.y) / H; kind = "droop"; k = clamp((pp - p0) / (1 - p0 + 0.0001), 0, 1); }
+        } else kind = "lying";
+      } else if (inPost) {
+        if (code === "collapse") { kind = "droop"; k = 1; }
+        else if (code === "okSupport") { kind = "attached"; }
+        else { kind = "moving"; k = ease(pk); if (code === "supportWaste") extra = "scratch"; }
+      } else { // 落摔階段
+        kind = "attached"; if (code === "supportWaste") extra = "scratch"; if (pred) alpha = 0.5;
+      }
+      /* 支撐材 */
+      if (set.support === "on") {
+        const fade = inPost ? 1 - pk : (inDrop ? 0 : 1);
+        if (fade > 0.01) {
+          if (standing) lattice = `<path class="lattice" style="opacity:${f1(fade)}" d="${latticePath(rootX + (side > 0 ? 3 : -sp.len), rootX + (side > 0 ? sp.len : -3), sp.y + sp.th / 2, GY, Math.round(sp.len / 14))}"/>`;
+          else { const lx = armRect(sp, side, "lying", 0)[0]; lattice = `<path class="lattice waste" style="opacity:${f1(fade)}" d="${latticePath(lx - 4, lx + sp.len + 4, GY - sp.th - 14, GY - sp.th, 5)}"/>`; }
+        }
+      }
+      return { side, kind, k, extra, lattice, alpha, rootX, joined: set.arm === "flat" };
+    });
+
+    const drawArm = (a) => {
+      const cls = "solid armp" + bad("arm");
+      let out = a.lattice;
+      const op = a.alpha < 1 ? ` opacity="${a.alpha}"` : "";
+      if (a.kind === "droop") {
+        const pts = []; const N = 14;
+        for (let i = 0; i <= N; i++) { const uu = i / N; pts.push(`${f1(a.rootX + a.side * sp.len * uu * (1 - 0.3 * a.k))},${f1(sp.y + a.k * 78 * uu * uu + Math.sin(uu * 10) * 5 * a.k * uu)}`); }
+        out += `<polyline class="noodle${bad("arm")}" points="${pts.join(" ")}"/>`;
+      } else if (a.kind === "break") {
+        const stub = 14, k = a.k;
+        const sx = a.side > 0 ? a.rootX : a.rootX - stub;
+        out += rectS(sx, sp.y - sp.th / 2, stub, sp.th, cls);
+        const fragLen = sp.len - stub, fx = a.side > 0 ? a.rootX + stub : a.rootX - sp.len;
+        const dy = k * (GY - sp.y - sp.th / 2 - 2) * ease(k), rot = a.side * k * 70;
+        const px = a.side > 0 ? fx : fx + fragLen;
+        out += `<g transform="translate(${f1(a.side * k * 18)},${f1(dy)}) rotate(${f1(rot)},${f1(px)},${f1(sp.y)})">${rectS(fx, sp.y - sp.th / 2, fragLen, sp.th, cls)}</g>`;
+        if (k < 0.9) out += `<path class="crack" d="M${f1(sx + (a.side > 0 ? stub : 0))} ${f1(sp.y - 10)} l6 7 l-8 6 l7 8"/>`;
+      } else {
+        const [x, y] = armRect(sp, a.side, a.kind, a.k);
+        let joint = "";
+        if (a.joined && a.kind === "attached") { const jx = a.side > 0 ? x : x + sp.len; joint = `<line class="seam" x1="${f1(jx)}" y1="${f1(y)}" x2="${f1(jx)}" y2="${f1(y + sp.th)}"/>`; }
+        else if (a.joined) { const px = a.side > 0 ? x - 7 : x + sp.len; joint = `<rect class="peg" x="${f1(px)}" y="${f1(y + sp.th / 2 - 3)}" width="7" height="6"/>`; }
+        out += `<g${op}>${rectS(x, y, sp.len, sp.th, cls)}${joint}${a.extra === "scratch" ? `<path class="scratch" d="M${f1(x + 8)} ${f1(y + 2)} l5 8 M${f1(x + 20)} ${f1(y + 1)} l5 9 M${f1(x + 32)} ${f1(y + 2)} l4 8"/>` : ""}</g>`;
+      }
+      return out;
+    };
+
+    /* ---- 本體 ---- */
+    const brokenFoot = isRobot && inDrop && !res.dropOk && u >= 0.6;
+    const wide = set.foot === "wide";
+    const legX = [CX - 24, CX + 14], legW = 10, legH = 55;
+    const footShapes = (mode) => {
+      let o = ""; const bf = "solid foot" + bad("foot");
+      legX.forEach((lx) => {
+        if (mode === "upper") { o += `<rect class="${bf}" x="${lx}" y="${GY - legH}" width="${legW}" height="${legH - 14}"/>`; return; }
+        const top = mode === "lower" ? GY - 14 : GY - legH, bottom = GY - (wide ? 14 : 3);
+        if (bottom > top) o += `<rect class="${bf}" x="${lx}" y="${top}" width="${legW}" height="${bottom - top}"/>`;
+        o += wide ? `<polygon class="${bf}" points="${lx},${GY - 16} ${lx + legW},${GY - 16} ${lx + legW + 16},${GY} ${lx - 16},${GY}"/>` : rectS(lx - 1, GY - 3, 12, 3, bf);
+      });
+      return o;
+    };
+    let body = "";
+    if (isRobot) {
+      let upper = `<rect class="solid" x="${CX - 34}" y="${GY - 165}" width="68" height="110" rx="8"/><rect class="accent hatch" x="${CX - 12}" y="${GY - 135}" width="24" height="16" rx="3"/>` +
+        `<rect class="solid" x="${CX - 22}" y="${GY - 210}" width="44" height="40" rx="12"/><circle class="led" cx="${CX - 10}" cy="${GY - 190}" r="4"/><circle class="led" cx="${CX + 10}" cy="${GY - 190}" r="4"/>`;
+      let legs = footShapes(brokenFoot ? "upper" : "full");
+      let armsMk = arms.map(drawArm).join("");
+      let g = "";
+      if (inDrop) {
+        let dy = 0, tilt = 0;
+        if (u < 0.25) dy = -90 * ease(u / 0.25); else if (u < 0.4) dy = -90; else if (u < 0.6) dy = -90 + 90 * Math.pow((u - 0.4) / 0.2, 2);
+        else if (res.dropOk) dy = u < 0.75 ? -10 * Math.sin((Math.PI * (u - 0.6)) / 0.15) : 0;
+        else tilt = Math.pow(clamp((u - 0.6) / 0.4, 0, 1), 0.7) * 72;
+        g = `<g transform="translate(0,${f1(dy)}) rotate(${f1(tilt)},${CX + 40},${GY})">${upper}${legs}${armsMk}</g>`;
+        if (brokenFoot) g += `<g>${footShapes("lower")}</g><text x="${CX + 20}" y="${GY - 60}" class="snap" font-size="26">啪！</text>`;
+        if (!brokenFoot && res.dropOk && u >= 0.6) g += `<text x="${CX}" y="${GY - 232}" class="okt" font-size="15" text-anchor="middle">✔ 穩穩站住</text>`;
+      } else g = legs + upper + armsMk;
+      body = `<g clip-path="url(#${cid})">${g}</g>`;
+    } else {
+      const pole = `<rect class="solid" x="${CX - 8}" y="${GY - 130}" width="16" height="116"/><polygon class="solid" points="${CX - 8},${GY - 14} ${CX + 8},${GY - 14} ${CX + 34},${GY} ${CX - 34},${GY}"/>`;
+      body = `<g clip-path="url(#${cid})">${pole}${arms.map(drawArm).join("")}</g>`;
+    }
+    s += body;
+
+    /* ---- 噴頭與軌道 ---- */
+    if (!preview && tt < 1 && (inPrint || inPost)) {
+      const ny = inPrint ? GY - rh - 6 : GY - H - 34, nx = inPrint ? CX + Math.sin(tt * 70) * (isRobot ? 52 : 40) : CX;
+      s += `<line class="rail" x1="30" y1="${GY - H - 46}" x2="${W - 30}" y2="${GY - H - 46}"/><rect class="carr" x="${f1(nx - 12)}" y="${GY - H - 52}" width="24" height="12" rx="3"/><line class="rail" x1="${f1(nx)}" y1="${GY - H - 40}" x2="${f1(nx)}" y2="${f1(ny - 8)}"/><polygon class="nozzle" points="${f1(nx - 6)},${f1(ny - 8)} ${f1(nx + 6)},${f1(ny - 8)} ${f1(nx)},${f1(ny + 4)}"/>`;
+    }
+    if (opt.hl && preview !== false) {
+      const side = sp.sides[0], rx = sp.rootX + 2, w = sp.len + 10;
+      s += `<rect class="hlbox" x="${rx - 6}" y="${f1(sp.y - sp.th / 2 - 12)}" width="${w + 6}" height="${sp.th + 24}" rx="6" fill="none"/>`;
+    }
+    /* ---- 標籤與燈號 ---- */
+    let label = "";
+    if (preview) label = "模型預覽（依目前設定）";
+    else if (inPrint) label = "列印中… " + Math.round(pp * 100) + "%";
+    else if (inPost) label = code === "okSupport" ? "小心拆除支撐材…" : (set.arm === "flat" ? "拆下的零件用卡榫嵌入組裝…" : "後處理…");
+    else if (inDrop) label = tt >= 1 && res.printOk && res.dropOk ? "完成：結構測試通過" : (pred ? "落摔預測（假設手臂沒問題）" : "落摔測試");
+    else label = res && res.printOk ? "完成" : "完成（有問題）";
+    s += `<text x="22" y="26" class="lab">${esc(label)}</text>`;
+    const done = !preview && tt >= 1, good = res && res.printOk && res.dropOk;
+    const led = (x, cls) => `<circle class="led2 ${cls}" cx="${x}" cy="22" r="7"/>`;
+    s += led(W - 52, inPrint || inPost || inDrop ? "heat" : "off") + led(W - 28, done ? (good ? "green" : "red") : "off");
+    return s;
+  }
+  const sceneSVG = (id) => `<svg id="${id}" viewBox="0 0 ${W} 290" class="scene" role="img" aria-label="3D 列印模擬畫面"></svg>`;
+
+  return { robotView, demoSVG, b1Markup, scene, sceneSVG };
+})();
+
+</script>
+<script id="app-js">
+/* =====================================================================
+   呈現層（二）：畫面、動畫、聲音、觸控。只呼叫邏輯層並顯示結果
+   ===================================================================== */
+(function () {
+  "use strict";
+  const C = CONFIG, L = Logic, A = Art;
+  const $ = (s, r) => (r || document).querySelector(s);
+  const RM = () => !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+  /* 只用 textContent / createTextNode 放文字，不用 innerHTML 塞玩家會看到的字 */
+  function el(tag, attrs, ...kids) {
+    const e = document.createElement(tag);
+    for (const k in attrs || {}) {
+      const v = attrs[k];
+      if (k === "class") e.className = v;
+      else if (k.slice(0, 2) === "on") e.addEventListener(k.slice(2), v);
+      else if (v === true) e.setAttribute(k, "");
+      else if (v !== false && v != null) e.setAttribute(k, v);
+    }
+    kids.flat(3).forEach((c) => { if (c == null || c === false) return; e.append(c.nodeType ? c : document.createTextNode(String(c))); });
+    return e;
+  }
+  const svgEl = (html) => { const d = document.createElement("div"); d.innerHTML = html; return d.firstElementChild; }; // 只放程式內建、已跳脫的 SVG
+  const para = (t, cls) => el("p", { class: cls || "" }, t);
+
+  /* ---------- 存檔（localStorage 包 try/catch，失敗退回記憶體） ---------- */
+  let ls = null; try { ls = window.localStorage; ls.setItem("__t", "1"); ls.removeItem("__t"); } catch (e) { ls = null; }
+  const store = L.makeStore(ls, C.storageKey);
+  const newSeed = () => Math.floor(Math.random() * 4294967294) + 1;
+  let state = L.restore(store.get(), Date.now(), newSeed());
+  let lastResult = null, lastFailNote = "", c1Tab = "front", anim = null, msgs = {}, hintPhase = null;
+  const persist = () => store.set(L.serialize(state));
+
+  /* ---------- 聲音：第一次點擊後才出聲 ---------- */
+  const Snd = {
+    ctx: null, on: false,
+    init() {
+      if (this.ctx) { if (this.ctx.state === "suspended") this.ctx.resume(); return; }
+      try { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; this.ctx = new AC(); if (this.ctx.state === "suspended") this.ctx.resume(); this.on = true; } catch (e) { this.on = false; }
+    },
+    tone(f, d, type, v, delay) {
+      if (!this.on) return;
+      try {
+        const t = this.ctx.currentTime + (delay || 0), o = this.ctx.createOscillator(), g = this.ctx.createGain();
+        o.type = type || "sine"; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v || 0.15, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+        o.connect(g); g.connect(this.ctx.destination); o.start(t); o.stop(t + d + 0.03);
+      } catch (e) { /* 忽略 */ }
+    },
+    click() { this.tone(880, 0.05, "square", 0.05); },
+    good() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.2, "triangle", 0.14, i * 0.11)); },
+    bad() { this.tone(190, 0.3, "sawtooth", 0.12); this.tone(140, 0.34, "sawtooth", 0.12, 0.17); },
+    snap() { this.tone(90, 0.14, "square", 0.2); this.tone(60, 0.2, "sawtooth", 0.15, 0.05); },
+    latch() { this.tone(320, 0.06, "square", 0.2); this.tone(640, 0.05, "square", 0.12, 0.06); }
+  };
+  document.addEventListener("pointerdown", () => Snd.init(), { capture: true });
+  const buzz = (ms) => { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* 忽略 */ } };
+
+  let toastTimer = 0;
+  function toast(text, kind) {
+    const t = $("#toast"); t.textContent = text; t.className = kind || ""; t.classList.remove("hidden");
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.add("hidden"), 3200);
+  }
+
+  /* ---------- 轉換動作 ---------- */
+  function dispatch(a, quiet) {
+    const r = L.reduce(state, a, Date.now());
+    if (r.state !== state) { state = r.state; persist(); }
+    if (!quiet) render();
+    return r.fb;
+  }
+
+  /* ---------- 通用元件 ---------- */
+  const STAGES = ["示範", "引導", "診斷", "列印"];
+  const stageIdx = () => ({ intro: -1, A: 0, B1: 1, B2: 1, C1: 2, C2: 3, done: 4 }[state.phase]);
+  function msgBox(key) { const m = msgs[key]; return el("div", { class: "msg " + (m ? m.kind : ""), id: "msg-" + key, role: "status", "aria-live": "polite" }, m ? m.text : ""); }
+  function setMsg(key, text, kind) { msgs[key] = text ? { text, kind } : null; const b = $("#msg-" + key); if (b) { b.className = "msg " + (kind || ""); b.textContent = text || ""; } }
+  const cardOf = (title, pass, text) => el("div", { class: "rescard " + (pass ? "pass" : "fail") }, el("b", {}, (pass ? "✔ " : "✘ ") + title), el("span", {}, text));
+
+  /* ---------- 各關畫面 ---------- */
+  function viewIntro() {
+    return el("div", { class: "panel pop" },
+      el("h2", {}, C.title + "：" + C.subtitle),
+      para(C.story.intro),
+      para("接下來會先看示範、再練習，最後自己動手調整列印參數。看得懂、做得到，才拿得到下一關的密碼。", "sub"),
+      el("button", { class: "btn big", id: "btnStart", onclick: () => { Snd.click(); dispatch({ type: "start" }); } }, "開始"));
+  }
+
+  function viewA() {
+    const i = state.aIdx, d = C.demo[i];
+    const dots = el("div", { class: "row" }, C.demo.map((_, k) => el("span", { class: "chip " + (k === i ? "on" : (k < i ? "fin" : "")) }, String(k + 1))));
+    return el("div", { class: "panel grid2 pop" },
+      el("div", {}, svgEl(A.demoSVG(i))),
+      el("div", {},
+        el("h2", {}, d.title), para(d.body), dots,
+        el("button", { class: "btn big", id: "btnNext", style: "margin-top:12px", onclick: () => {
+          Snd.click(); const fb = dispatch({ type: "aNext" }, true);
+          if (fb.ok) render(); else if (fb.kind === "tooEarly") toast("再看一下動畫，還要 " + Math.ceil(fb.waitMs / 1000) + " 秒", "info");
+        } }, i === C.demo.length - 1 ? "看完了，去練習" : "下一張"),
+        para("每張卡要看滿幾秒，按鈕才會亮起來。", "sub")));
+  }
+
+  function b1Verdict(angle) { return angle > C.b1.critical ? ["✘ 會垂落：下面沒有東西托住", "bad"] : ["✔ 可以直接印：不會垂落", "ok"]; }
+  function viewB1() {
+    const ang = state.b1.angle;
+    const wrap = el("div", { id: "b1svg" }); wrap.innerHTML = A.b1Markup(ang);
+    const readout = el("div", { class: "readout", id: "b1read" }, "θ = " + ang + "°");
+    const [vt, vk] = b1Verdict(ang); const verdict = el("div", { class: "verdict " + vk, id: "b1verdict" }, vt);
+    const slider = el("input", { type: "range", min: 0, max: C.b1.max, step: 1, value: ang, id: "b1slider", "aria-label": "懸空角度" });
+    slider.style.touchAction = "none";
+    slider.addEventListener("input", () => {
+      const fb = dispatch({ type: "b1Set", angle: slider.value }, true); if (!fb.ok) return;
+      wrap.innerHTML = A.b1Markup(state.b1.angle); readout.textContent = "θ = " + state.b1.angle + "°";
+      const [t2, k2] = b1Verdict(state.b1.angle); verdict.className = "verdict " + k2; verdict.textContent = t2; setMsg("b1", "", "");
+    });
+    return el("div", { class: "panel grid2 pop" },
+      el("div", {}, wrap),
+      el("div", {},
+        el("h2", {}, "練習 1：找出 45° 的分界"),
+        para("拖曳滑桿調整「懸空角度」（和垂直線的夾角）。把角度調到「不用支撐材也印得出來的最大角度」，再按確認。"),
+        readout, slider, verdict,
+        el("button", { class: "btn big", style: "margin-top:8px", onclick: () => {
+          Snd.click(); const fb = dispatch({ type: "b1Confirm" }, true);
+          if (fb.ok) { toast("答對了！下一個練習", "good"); Snd.good(); render(); }
+          else { Snd.bad(); setMsg("b1", fb.kind === "b1Low" ? "還可以再大一點：這個角度還沒到極限。" : "超過了：懸空處已經垂落。往回調一點。", "bad"); }
+        } }, "確認：這就是最大角度"),
+        msgBox("b1")));
+  }
+
+  function viewB2() {
+    const b = state.b2;
+    const sceneBox = el("div", {}); sceneBox.append(svgEl(A.sceneSVG("sceneB2")));
+    const settings = ["support", "orient"].map((k) => el("div", { class: "setting" }, el("b", {}, C.labels[k].title),
+      el("div", { class: "seg" }, C.flag.defaults && ["off", "on", "stand", "flat"].filter((v) => (k === "support" ? ["off", "on"] : ["stand", "flat"]).includes(v)).map((v) =>
+        el("button", { class: "opt" + (b[k] === v ? " on" : ""), onclick: () => { Snd.click(); dispatch({ type: "b2Set", key: k, value: v }, true); setMsg("b2", "", ""); render(); } }, C.labels[k][v])))));
+    return el("div", { class: "panel grid2 pop" },
+      el("div", {}, sceneBox, el("p", { class: "sub" }, "橘色虛線框＝要特別注意的地方")),
+      el("div", {},
+        el("h2", {}, "練習 2：小旗子"), el("ol", { style: "margin:4px 0 8px;padding-left:22px" }, C.b2.steps.map((t) => el("li", {}, t))),
+        settings,
+        el("button", { class: "btn big", id: "btnB2", onclick: onB2 }, "▶ 開始列印"), msgBox("b2")));
+  }
+  const mapFlag = (code) => ({ ok: "ok", collapse: "collapse", okSupport: "okSupport", waste: "supportWaste" }[code]);
+  function onB2() {
+    if (anim) return; Snd.click();
+    const set = { support: state.b2.support, arm: state.b2.orient, foot: "wide" };
+    const fb = dispatch({ type: "b2Run" }, true);
+    const res = { printCode: mapFlag(fb.code), dropCode: "ok", printOk: fb.code === "ok", dropOk: true };
+    const dur = RM() ? 900 : 2600;
+    $("#btnB2").disabled = true;
+    anim = playScene($("#sceneB2"), "flag", set, res, dur, { hl: true }, (t) => { if (t >= 0.6 && !anim.cued) { anim.cued = true; res.printOk ? Snd.good() : (Snd.bad(), buzz(150)); } }, () => {
+      anim = null;
+      if (fb.ok) { toast(fb.text, "good"); render(); }
+      else { setMsg("b2", fb.text, "bad"); const b = $("#btnB2"); if (b) b.disabled = false; }
+    });
+  }
+
+  /* C1：三視圖診斷 */
+  const partName = (p) => C.c1.parts[p].name;
+  function markPart(part) {
+    Snd.click(); const fb = dispatch({ type: "c1Mark", part }, true);
+    if (fb.kind === "markWrong") setMsg("c1", "「" + partName(part) + "」：" + fb.text, "info"); else setMsg("c1", "", "");
+    render();
+  }
+  function viewC1() {
+    if (!state.c1.views[c1Tab]) dispatch({ type: "c1View", view: c1Tab }, true);
+    const names = { front: "前視圖", side: "側視圖", top: "俯視圖" };
+    const tabs = el("div", { class: "tabs" }, ["front", "side", "top"].map((v) => el("button", { class: "tab" + (c1Tab === v ? " on" : "") + (state.c1.views[v] ? " seen" : ""), onclick: () => { Snd.click(); c1Tab = v; dispatch({ type: "c1View", view: v }, true); render(); } }, names[v])));
+    const svg = svgEl(A.robotView(c1Tab));
+    svg.querySelectorAll(".part").forEach((p) => { if (state.c1.marks[p.dataset.part]) p.classList.add("marked"); });
+    svg.addEventListener("click", (e) => { const p = e.target.closest("[data-part]"); if (p) markPart(p.dataset.part); });
+    svg.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { const p = e.target.closest("[data-part]"); if (p) { e.preventDefault(); markPart(p.dataset.part); } } });
+    const chips = el("div", { class: "partchips" }, L.consts.PARTS.map((p) => el("button", { class: "pchip" + (state.c1.marks[p] ? " on" : ""), onclick: () => markPart(p) }, (state.c1.marks[p] ? "⚑ " : "") + partName(p))));
+    const reasonPanels = L.consts.WEAK.filter((p) => state.c1.marks[p]).map((p) => {
+      const sel = state.c1.reasons[p];
+      return el("div", { class: "setting" }, el("b", {}, "你標了「" + partName(p) + "」，原因是？"),
+        el("div", { class: "reasons" }, L.reasonOptions(state, p).map((o) => {
+          const picked = sel === o.id, right = C.c1.reasons[p].find((x) => x.id === o.id).correct;
+          return el("button", { class: "opt" + (picked ? (right ? " good" : " wrong") : ""), onclick: () => {
+            Snd.click(); const fb = dispatch({ type: "c1Reason", part: p, option: o.id }, true);
+            setMsg("c1", fb.kind === "reasonWrong" ? "這個原因不對：" + fb.text : (fb.kind === "reasonOk" ? "✔ 這個原因說得通。" : ""), fb.kind === "reasonWrong" ? "bad" : "good"); render();
+          } }, o.text);
+        })));
+    });
+    return el("div", { class: "panel grid2 pop" },
+      el("div", {}, tabs, svg, el("p", { class: "note-box" }, C.c1.viewText[c1Tab]), chips),
+      el("div", {},
+        el("h2", {}, "診斷：找出兩個弱點"),
+        para("三個視圖都要看。點選你認為會出問題的部位（可以點圖，也可以點下面的按鈕），再選出原因。"),
+        reasonPanels, msgBox("c1"),
+        el("button", { class: "btn big", onclick: onC1Check }, "完成診斷")));
+  }
+  function onC1Check() {
+    Snd.click(); const fb = dispatch({ type: "c1Check" }, true);
+    if (fb.ok) { Snd.good(); toast("診斷完成！列印設定台解鎖了", "good"); msgs = {}; render(); return; }
+    Snd.bad();
+    const names = { front: "前視圖", side: "側視圖", top: "俯視圖" };
+    const t = { needViews: () => "三個視圖都要看過。還沒看：" + fb.missing.map((v) => names[v]).join("、"),
+      extraMark: () => "「" + partName(fb.part) + "」不是弱點：" + fb.text,
+      missingMarks: () => "還有 " + fb.count + " 個弱點沒找到。再對照三個視圖上的數字。",
+      needReason: () => "「" + partName(fb.part) + "」還沒選原因。",
+      wrongReason: () => "「" + partName(fb.part) + "」的原因不對：" + fb.text }[fb.kind];
+    setMsg("c1", t ? t() : "還沒完成。", "bad");
+  }
+
+  /* C2：設定與列印模擬 */
+  function sceneInner() {
+    if (state.phase === "done") { return A.scene("robot", state.set, { printCode: "ok", dropCode: "ok", printOk: true, dropOk: true }, 1); }
+    if (lastResult) return A.scene("robot", lastResult.set, lastResult.res, 1);
+    return A.scene("robot", state.set, null, null);
+  }
+  function viewC2() {
+    const done = state.phase === "done", dis = done || state.animating || !!anim || state.locked;
+    const svg = svgEl(A.sceneSVG("sceneC2")); svg.innerHTML = sceneInner();
+    const left = el("div", {}, svg);
+    if (lastResult && !done) left.append(el("div", { class: "res2" }, cardOf("列印階段", lastResult.res.printOk, lastResult.res.printText), cardOf("落摔階段" + (lastResult.res.printOk ? "" : "（預測）"), lastResult.res.dropOk, lastResult.res.dropText)));
+    const settings = ["support", "arm", "foot"].map((k) => el("div", { class: "setting" }, el("b", {}, C.labels[k].title),
+      el("div", { class: "seg" }, L.consts.KEYS[k].map((v) => el("button", { class: "opt" + (state.set[k] === v ? " on" : ""), disabled: dis, onclick: () => {
+        Snd.click(); const fb = dispatch({ type: "set", key: k, value: v }, true); if (fb.ok) { lastResult = null; render(); }
+      } }, C.labels[k][v])))));
+    const right = el("div", {},
+      el("h2", {}, done ? "列印完成" : "設定列印參數"),
+      done ? para("設定已鎖定，可以重播動畫或看過關訊息。", "sub") : para("兩個弱點都要處理。想好再按開始；失敗會有冷卻時間。", "sub"),
+      settings,
+      el("div", { class: "row" },
+        el("button", { class: "btn", id: "btnPrint", style: "flex:1", onclick: onPrint }, "▶ 開始列印模擬"),
+        done ? null : el("button", { class: "btn ghost small", disabled: dis, onclick: () => { Snd.click(); if (dispatch({ type: "resetSet" }, true).ok) { lastResult = null; render(); } } }, "重設參數")),
+      lastFailNote && !done ? el("div", { class: "note-box" }, el("b", {}, "上一次的失敗原因："), lastFailNote) : null);
+    return el("div", { class: "panel grid2 pop" }, left, right);
+  }
+  function printBtnState() {
+    if (state.phase === "done") return { label: "🔁 重播成功動畫", dis: state.animating || !!anim };
+    if (state.animating || anim) return { label: "模擬進行中…", dis: true };
+    if (state.locked) return { label: "機器暫停", dis: true };
+    const left = L.cooldownLeft(state, Date.now());
+    if (left > 0) return { label: C.msg.cooling.replace("{n}", Math.ceil(left / 1000)), dis: true };
+    return { label: "▶ 開始列印模擬", dis: false };
+  }
+  function onPrint() {
+    if (anim) return; Snd.click();
+    const fb = dispatch({ type: "print", animMs: RM() ? 1200 : C.timing.animMs }, true);
+    if (!fb.ok) {
+      const m = { cooldown: () => C.msg.cooling.replace("{n}", Math.ceil(fb.leftMs / 1000)), repeat: () => C.msg.repeat, needTutorial: () => C.msg.needTutorial, needC1: () => C.msg.needC1, busy: () => "" }[fb.kind];
+      if (m && m()) toast(m(), "info"); chrome(); return;
+    }
+    playPrint(fb);
+  }
+  function playPrint(fb) {
+    const set = Object.assign({}, state.set), res = fb.kind === "replay" ? { printCode: "ok", dropCode: "ok", printOk: true, dropOk: true } : fb.result;
+    lastResult = null; chrome();
+    const dur = RM() ? 900 : (Number(C.timing.animMs) || 5200); const cue = {};
+    anim = playScene($("#sceneC2"), "robot", set, res, dur, {}, (t) => {
+      if (t >= 0.5 && !cue.a) { cue.a = 1; if (!res.printOk) { Snd.bad(); buzz(150); } }
+      if (t >= 0.58 + 0.42 * 0.6 && !cue.b) { cue.b = 1; if (!res.dropOk) { Snd.snap(); buzz(260); } }
+      if (t >= 0.99 && !cue.c) { cue.c = 1; if (res.printOk && res.dropOk) { Snd.latch(); Snd.good(); } }
+    }, () => {
+      anim = null; dispatch({ type: "animEnd" }, true);
+      if (fb.kind === "fail") {
+        lastResult = { set, res };
+        lastFailNote = [res.printOk ? "" : "列印：" + res.printText, res.dropOk ? "" : "落摔：" + res.dropText].filter(Boolean).join("　");
+        if (state.locked) toast("機器暫停，請找關主", "bad");
+      } else if (fb.kind === "success") { toast("列印成功！", "good"); }
+      render();
+    });
+  }
+
+  /* C3：完成 */
+  function viewDone() {
+    const info = L.successInfo(state);
+    const laser = `<svg viewBox="0 0 160 110" class="icon-laser" role="img" aria-label="雷射切割圖示"><rect x="14" y="78" width="132" height="16" rx="4" class="solid"/><rect x="62" y="16" width="36" height="26" rx="5" class="solid"/><path d="M80 42 L80 78" stroke="#ff4d5e" stroke-width="4"/><circle cx="80" cy="78" r="6" fill="#ff4d5e"><animate attributeName="r" values="4;8;4" dur="1s" repeatCount="indefinite"/></circle><path d="M30 94 L130 94" stroke="#ffb066" stroke-width="2" stroke-dasharray="4 3"/></svg>`;
+    const rev = el("details", { class: "panel", style: "margin-top:10px" }, el("summary", { style: "font-weight:800;cursor:pointer" }, "想一想（選做）：把剛剛學到的說出來"),
+      C.review.map((q, qi) => { const out = el("div", { class: "msg" });
+        return el("div", { class: "setting", style: "margin-top:10px" }, el("b", {}, (qi + 1) + ". " + q.q),
+          el("div", { class: "reasons" }, L.reviewOptions(state, qi).map((o) => el("button", { class: "opt", onclick: (ev) => {
+            const fb = dispatch({ type: "review", q: qi, option: o.id }, true); Snd.click();
+            ev.target.parentNode.querySelectorAll(".opt").forEach((b) => b.classList.remove("good", "wrong")); ev.target.classList.add(fb.correct ? "good" : "wrong");
+            out.className = "msg " + (fb.correct ? "good" : "bad"); out.textContent = fb.text;
+          } }, o.text))), out);
+      }));
+    const successPanel = el("div", { class: "panel pop", style: "border-color:var(--green)" },
+      el("h2", {}, "✔ 機關完成！"), para(info.story),
+      el("div", { class: "codebox" }, el("div", { class: "sub" }, info.label), el("div", { class: "code" }, info.code), svgEl(laser)),
+      para(info.next), rev);
+    return el("div", {}, successPanel, el("div", { style: "height:10px" }), viewC2());
+  }
+
+  function view() {
+    if (state.phase !== hintPhase) { hintPhase = state.phase; hideHint(); }
+    switch (state.phase) {
+      case "intro": return viewIntro();
+      case "A": return viewA();
+      case "B1": return viewB1();
+      case "B2": return viewB2();
+      case "C1": return viewC1();
+      case "C2": return viewC2();
+      default: return viewDone();
+    }
+  }
+
+  /* B2 場景在畫面出現後要先畫預覽 */
+  function afterRender() {
+    const sb = $("#sceneB2"); if (sb && !anim) sb.innerHTML = A.scene("flag", { support: state.b2.support, arm: state.b2.orient, foot: "wide" }, null, null, { hl: true });
+  }
+
+  /* ---------- 場景動畫（B2、C2 共用） ---------- */
+  function playScene(svg, model, set, res, dur, opt, onFrame, onDone) {
+    const h = { raf: 0, cued: false }; const t0 = performance.now();
+    if (RM()) { svg.innerHTML = A.scene(model, set, res, 1, opt); h.raf = setTimeout(onDone, 700); return h; }
+    const frame = (now) => {
+      const t = Math.min(1, (now - t0) / dur); svg.innerHTML = A.scene(model, set, res, t, opt); onFrame && onFrame(t);
+      if (t < 1) h.raf = requestAnimationFrame(frame); else setTimeout(onDone, 350);
+    };
+    h.raf = requestAnimationFrame(frame); return h;
+  }
+
+  /* ---------- 外框：階段、徽章、提示鈕、鎖機、按鈕狀態 ---------- */
+  function chrome() {
+    const si = stageIdx();
+    $("#chips").replaceChildren(...STAGES.map((n, i) => el("span", { class: "chip" + (i === si ? " on" : (i < si ? " fin" : "")) }, (i < si ? "✓ " : "") + n)));
+    $("#grp").textContent = "第 " + state.group + " 組";
+    $("#donebadge").classList.toggle("hidden", !state.completed);
+    const hb = $("#hintbtn"); const stg = L.stageOf(state.phase);
+    hb.classList.toggle("hidden", !stg);
+    if (stg) hb.textContent = "💡 提示（已看 " + state.hintSeen[stg] + "/3 層）";
+    $("#info").textContent = "第 " + state.group + " 組 · 失敗 " + state.failCount + " 次 · 提示 " + state.hintsUsed + " 次";
+    const lock = $("#lock"); const showLock = state.locked && !anim && !state.animating;
+    lock.classList.toggle("hidden", !showLock);
+    if (showLock) $("#lockmsg").textContent = C.msg.lock.replace("{n}", C.timing.lockAfter);
+    updateBtns();
+  }
+  function updateBtns() {
+    const pb = $("#btnPrint"); if (pb) { const s = printBtnState(); pb.textContent = s.label; pb.disabled = s.dis; }
+    const nb = $("#btnNext");
+    if (nb) { const left = C.timing.demoMs - (Date.now() - state.cardStart); const last = state.aIdx === C.demo.length - 1;
+      nb.disabled = left > 0; nb.textContent = left > 0 ? "再看 " + Math.ceil(left / 1000) + " 秒…" : (last ? "看完了，去練習" : "下一張"); }
+  }
+  function render() { chrome(); if (anim) return; $("#main").replaceChildren(view()); afterRender(); chrome(); }
+
+  /* ---------- 提示 ---------- */
+  function hideHint() { const s = $("#hintsheet"); if (s) s.classList.add("hidden"); }
+  function onHint() {
+    Snd.click(); const fb = dispatch({ type: "hint" }, true); chrome(); if (!fb.ok) return;
+    const s = $("#hintsheet"); s.replaceChildren(el("div", { class: "row spread" }, el("span", { class: "lv" }, "💡 提示　第 " + fb.level + " / 3 層"), el("button", { class: "btn ghost small", onclick: hideHint }, "關閉")), el("p", { style: "margin:6px 0 0;font-size:20px" }, fb.text));
+    s.classList.remove("hidden");
+  }
+
+  /* ---------- 關主：長按 3 秒 → PIN → 面板 ---------- */
+  function makeHold(btn) {
+    let timer = 0, raf = 0, t0 = 0; const ring = btn.querySelector(".ring");
+    const stop = () => { clearTimeout(timer); cancelAnimationFrame(raf); timer = 0; if (ring) ring.style.setProperty("--p", "0deg"); };
+    btn.style.touchAction = "none";
+    btn.addEventListener("contextmenu", (e) => e.preventDefault());
+    btn.addEventListener("pointerdown", (e) => {
+      e.preventDefault(); Snd.init(); t0 = performance.now();
+      const step = () => { const p = Math.min(1, (performance.now() - t0) / C.timing.holdMs); if (ring) ring.style.setProperty("--p", p * 360 + "deg"); if (p < 1) raf = requestAnimationFrame(step); };
+      step(); timer = setTimeout(() => { stop(); openPin(); }, C.timing.holdMs);
+    });
+    ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => btn.addEventListener(ev, () => { if (timer) { stop(); toast("關主專用：要長按 " + Math.round(C.timing.holdMs / 1000) + " 秒", "info"); } }));
+  }
+  let wrongPins = 0, pinBlockUntil = 0, pinFor = "admin";
+  function closeOverlay() { const o = $("#adm"); o.classList.add("hidden"); o.replaceChildren(); }
+  function openPin() {
+    let pin = ""; const o = $("#adm"); o.classList.remove("hidden");
+    const dots = el("div", { class: "pindots" }, "");
+    const info = el("div", { class: "msg" });
+    const upd = () => { dots.textContent = "●".repeat(pin.length) + "○".repeat(Math.max(0, 4 - pin.length)); };
+    const submit = () => {
+      if (Date.now() < pinBlockUntil) { info.className = "msg bad"; info.textContent = "輸入錯誤太多次，請 " + Math.ceil((pinBlockUntil - Date.now()) / 1000) + " 秒後再試"; return; }
+      if (L.checkPin(pin)) { wrongPins = 0; openAdmin(pin); return; }
+      wrongPins++; pin = ""; upd(); info.className = "msg bad"; info.textContent = "PIN 不正確"; $("#adm .box").classList.remove("shake"); void $("#adm .box").offsetWidth; $("#adm .box").classList.add("shake");
+      if (wrongPins >= 3) { pinBlockUntil = Date.now() + 30000; wrongPins = 0; info.textContent = "連續錯誤 3 次，鎖定 30 秒"; }
+    };
+    const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "確定"].map((k) => el("button", { onclick: () => {
+      if (k === "⌫") pin = pin.slice(0, -1); else if (k === "確定") { submit(); return; } else if (pin.length < 4) pin += k; upd(); if (pin.length === 4 && k !== "⌫") submit();
+    } }, k));
+    o.replaceChildren(el("div", { class: "box" }, el("h2", {}, "關主驗證"), para("請輸入 4 位數 PIN", "sub"), dots, el("div", { class: "keypad" }, keys), info, el("button", { class: "btn ghost", onclick: closeOverlay }, "取消")));
+    upd();
+  }
+  function openAdmin(pin) {
+    let g = Math.min(C.groupCodes.length, state.group + 1);
+    const o = $("#adm"); const out = el("output", {}, String(g)); const codeLine = el("div", { class: "sub" });
+    const upd = () => { out.textContent = String(g); codeLine.textContent = "第 " + g + " 組的過關代碼：" + L.codeFor(g); };
+    const step = (d) => { g = Math.max(1, Math.min(C.groupCodes.length, g + d)); upd(); };
+    const doUnlock = () => { const fb = dispatch({ type: "unlock", pin }, true); if (fb.ok) { toast("已解鎖，可以繼續", "good"); closeOverlay(); render(); } };
+    const doReset = () => {
+      const fb = dispatch({ type: "reset", pin, group: g, seed: newSeed() }, true);
+      if (fb.ok) { store.del(); persist(); lastResult = null; lastFailNote = ""; msgs = {}; c1Tab = "front"; anim = null; hintPhase = null; closeOverlay(); hideHint(); render(); toast("已重來，換第 " + state.group + " 組", "good"); }
+    };
+    o.replaceChildren(el("div", { class: "box" },
+      el("h2", {}, "關主面板"),
+      el("p", { class: "sub" }, "目前：第 " + state.group + " 組 · 失敗 " + state.failCount + " 次 · 提示 " + state.hintsUsed + " 次" + (state.locked ? " · 已鎖機" : "") + (state.completed ? " · 已完成" : "")),
+      state.locked ? el("button", { class: "btn big green", onclick: doUnlock }, "解鎖機器（讓這組繼續）") : null,
+      el("hr", { style: "border-color:var(--line);margin:14px 0" }),
+      el("b", {}, "重來，並換到下一組"), el("div", { class: "stepper" }, el("button", { onclick: () => step(-1) }, "−"), out, el("button", { onclick: () => step(1) }, "＋")), codeLine,
+      el("button", { class: "btn big", style: "margin-top:8px", onclick: doReset }, "重來（全部清空）"),
+      el("button", { class: "btn ghost", style: "margin-top:10px;width:100%", onclick: closeOverlay }, "關閉")));
+    upd();
+  }
+
+  /* ---------- 啟動 ---------- */
+  function boot() {
+    document.title = C.title + "｜" + C.subtitle;
+    $("#brandT").textContent = C.title; $("#brandS").textContent = C.subtitle;
+    $("#hintbtn").addEventListener("click", onHint);
+    makeHold($("#gear")); makeHold($("#lockhold"));
+    render();
+    setInterval(updateBtns, 250);
+    if (/(^|[?&])test=1(&|$)/.test(location.search)) Tests.render($("#app"));
+  }
+  boot();
+})();
+
+</script>
+</body>
+</html>

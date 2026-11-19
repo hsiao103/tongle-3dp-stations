@@ -1,0 +1,1827 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>3D 列印模擬台・第二關</title>
+<script id="config">
+/* =====================================================================
+   CONFIG：老師只要改這裡就能換內容，不用動程式
+   ※ 標「教學用設定值」的數字不是業界標準，可依學校實際情況調整；
+      改了檢核數字，請同步確認該題的「正確答案」（自動測試會幫你檢查是否矛盾）。
+   ===================================================================== */
+const ENV = { room: 12, bedTarget: 60, bedNow: 38 };            // 教學用設定值：室溫、平台目標溫度、平台目前能升到的溫度（℃）
+const FILA = { remainG: 18, needG: 32 };                        // 教學用設定值：線材卷剩餘克數、這隻公仔預估要用的克數
+const PLATE = { gaps: { lf: 0.10, rf: 0.10, lb: 0.11, rb: 0.10 }, tol: 0.05, seated: false }; // 教學用設定值：紙張法量到的四角間隙(mm，已調平、差距在容許內)、可接受的差距；seated＝磁吸板是否確實吸附到位（false＝沒吸好）
+
+const CONFIG = {
+  title: "3D 列印模擬台",
+  subtitle: "第二關・運作流程",
+  storageKey: "tongle-3dp-s2-v1",
+
+  /* ---- 故事（{code} 會換成該組代碼）---- */
+  story: {
+    intro: "守護機器人重新站起來後，對你敬了個禮：「第一關你修好了我，這一關換你示範真正的 3D 列印工作流程。」創客教室也接到新委託：為學校做一批「校園形象公仔」當作紀念品。從生成模型、備料、切片、列印前檢核，到取件、打磨、上色，每一步都要先做對決定，3D 機器才會動作。請你一步一步把公仔做出來！",
+    linkOk: "已確認第一關完成。你的守護機器人是用 PLA 線材印的，這次的公仔可以參考當時的經驗。",
+    success: "「公仔完成！」最後一層保護漆乾了，一隻圓圓的校園公仔站上展示台，朝大家揮了揮手，底座下面貼著一張寫著下一關密碼的小標籤。",
+    next: "拿到密碼「{code}」後，請把它交給關主，領取下一關的任務。"
+  },
+
+  /* ---- 每組不同的過關代碼；第一關的代碼也用來「確認第一關完成」並帶入組別 ---- */
+  groupCodes: ["450", "405", "540", "504", "045", "054", "451", "415", "541", "514"],
+  link: { enabled: true, codes: ["450", "405", "540", "504", "045", "054", "451", "415", "541", "514"] },
+  codeLabel: "下一關密碼",
+  masterPin: "2468",
+
+  timing: {
+    cooldownMs: 3000,   // 答錯後的冷卻
+    animMs: 3600,       // 每步 3D 動畫長度（巡檢動畫會自動拉長）
+    lockAfter: 5,       // 同一步累計答錯幾次就鎖機（要關主協助）
+    holdMs: 3000        // 關主按鈕要長按多久
+  },
+
+  env: ENV, fila: FILA, plate: PLATE,
+
+  /* ---- 3D 場景裡可以點的物件 ---- */
+  objects: {
+    spool: { name: "線材卷" }, nozzle: { name: "噴頭" }, fan: { name: "散熱風扇" },
+    screen: { name: "觸控螢幕" }, knob: { name: "調平旋鈕" }, bed: { name: "磁吸式列印板" }
+  },
+
+  /* ---- 七個步驟（第 4 步是「列印前檢核」：三項都過了才能開始列印）---- */
+  steps: [
+    { id: "design", short: "生成", title: "① 生成公仔", qs: ["design"] },
+    { id: "buy",    short: "備料", title: "② 購買材料", qs: ["buy"] },
+    { id: "slice",  short: "切片", title: "③ 切片設定", qs: ["slice"] },
+    { id: "check",  short: "檢核", title: "④ 列印前檢核", qs: ["filament", "plate", "env"], gate: true },
+    { id: "watch",  short: "巡檢", title: "⑤ 列印巡檢", qs: ["watch"] },
+    { id: "post",   short: "加工", title: "⑥ 取件與素模", qs: ["post"] },
+    { id: "paint",  short: "上色", title: "⑦ 上色", qs: ["paint"] }
+  ],
+
+  gate: { label: "▶ 開始列印", locked: "三項檢核都通過，才能開始列印。", doneMsg: "三項都通過了！按下「開始列印」。" },
+
+  /* ---- 題目（每題只有一個正解；答錯的 why 不能直接說出答案）---- */
+  questions: {
+    design: {
+      kind: "choice", title: "生成公仔",
+      prompt: "你拿同樂小將的圖，請 AI 生成了一隻公仔的 3D 模型，準備拿去印。印之前，最先該做什麼？",
+      options: [
+        { id: "a", text: "先用軟體檢查模型：是否封閉、壁厚夠不夠、有沒有太懸空的地方", correct: true },
+        { id: "b", text: "直接送去切片列印，印壞了再說", why: "AI 生成的模型可能有破洞或太薄的地方，直接印很容易半途失敗，白白浪費材料和時間。" },
+        { id: "c", text: "把公仔放大成三倍，這樣看起來比較精緻", why: "尺寸要配合列印平台的大小、列印時間和材料量，不是越大越好。" },
+        { id: "d", text: "連背景場景一起生成，一起印出來", why: "背景是多餘的部分，會多花材料和時間，也不是這次要的公仔。" }
+      ],
+      answerKeys: ["檢查模型", "封閉", "壁厚", "軟體"],
+      learn: "AI 生成的模型常有破面、太薄或懸空太多的地方。印之前先在軟體裡檢查、修補，才不會印到一半失敗。",
+      hints: ["想一想：AI 生成的東西，一定是完美、能直接印的嗎？", "印出來是一層一層疊上去的，模型要「能被這樣印出來」才行。", "找找看哪個選項是在「印之前先確認模型」。"]
+    },
+    buy: {
+      kind: "choice", title: "購買材料",
+      prompt: "活動現場是教室，學生會圍在旁邊看，一次要印 10 隻，預算有限。你要買哪一組機型與耗材？",
+      options: [
+        { id: "a", text: "FDM 印表機＋PLA 線材", correct: true },
+        { id: "b", text: "光固化印表機＋樹脂", why: "光固化的細節很細緻，但樹脂有氣味、要戴手套，還要清洗與二次固化，不適合在教室讓很多學生圍著操作。" },
+        { id: "c", text: "FDM 印表機＋TPU 軟線", why: "TPU 很軟、有彈性，站立的公仔細節與支撐都很難印好，這次的公仔不需要這麼軟。" },
+        { id: "d", text: "FDM 印表機＋ABS 線材", why: "ABS 容易翹曲，需要密閉保溫，味道也比較重，教室環境不容易控制。" }
+      ],
+      answerKeys: ["PLA"],
+      learn: "教學現場要考慮安全、味道、操作難度和成本：FDM 搭配 PLA 最容易上手。光固化適合做很小、細節很多的作品，但要有通風與防護。",
+      hints: ["先想「現場條件」：在哪裡印？旁邊有誰？要印幾隻？", "有些材料有氣味、需要手套或密閉空間，不適合教室。", "選「最容易上手、最安全」的組合。"]
+    },
+    slice: {
+      kind: "choice", title: "切片設定",
+      prompt: "公仔高約 8 公分，帽簷往外突出，要站在桌上展示。請選出最合適的切片設定：",
+      options: [
+        { id: "a", text: "層高 0.2 mm、填充 15%、加寬底座（brim）、支撐只開在帽簷下", correct: true },
+        { id: "b", text: "層高 0.4 mm、填充 100%、不加底座、全部都開支撐", why: "層高太粗，表面會有明顯紋路；填充 100% 浪費材料又很慢；全部都開支撐會讓表面很難處理。" },
+        { id: "c", text: "層高 0.05 mm、填充 15%、加寬底座、支撐只開在帽簷下", why: "層高 0.05 mm 會讓列印時間變得非常長，教室活動根本做不完。" },
+        { id: "d", text: "層高 0.2 mm、填充 0%、不加底座、完全不開支撐", why: "填充 0% 內部全空，容易壓壞；沒有底座也沒有任何支撐，站立的公仔和突出的帽簷容易倒或垂落。" }
+      ],
+      answerKeys: ["0.2", "15%", "支撐只開在"],
+      learn: "切片是在速度、品質和強度之間取平衡：層高適中、填充不用滿，底座幫忙站穩，支撐只放在真正懸空的地方（和第一關「45° 懸空」是同一個觀念）。",
+      hints: ["想想：品質、時間、材料，要不要都做到極端？", "第一關學過：哪裡懸空，哪裡才需要支撐。", "有一個選項在「時間、強度、支撐」上都沒有走極端。"]
+    },
+    filament: {
+      kind: "pick", title: "檢核一：耗材",
+      prompt: "看讀數：這卷線材可以直接印嗎？請在 3D 場景（或下方按鈕）點出需要處理的地方；如果你覺得沒問題，就按「沒問題，放行」。",
+      readings: "filament",
+      pick: {
+        correct: "spool", objs: ["spool", "nozzle", "fan", "screen"],
+        why: {
+          nozzle: "噴頭負責把線材熔化擠出來，讀數裡它沒有任何異常。",
+          fan: "風扇只負責冷卻剛擠出來的線材，和線材夠不夠無關。",
+          screen: "螢幕只是顯示讀數，要處理的是讀數背後的東西。",
+          release: "讀數裡有一項不夠用，現在放行，印到一半就會沒料。"
+        }
+      },
+      answerKeys: [],
+      learn: "印之前要比對「剩餘量」和「預估用量」。不夠就先換新卷；換線時要先把噴頭加熱到線材可以熔化的溫度，再送線，否則容易卡住。",
+      hints: ["把「剩餘」和「預估用量」兩個數字放在一起比比看。", "問題出在線材本身，不在機器的其他零件。", "線材是裝在哪個零件上的？"]
+    },
+    plate: {
+      kind: "pick", title: "檢核二：板子",
+      prompt: "看讀數：列印平台準備好了嗎？請點出需要處理的地方；如果你覺得沒問題，就按「沒問題，放行」。",
+      readings: "plate",
+      pick: {
+        correct: "bed", objs: ["bed", "knob", "fan", "screen", "spool"],
+        why: {
+          knob: "調平旋鈕是用來調整平台高低的。這台機器的四角間隙已經一致，旋鈕不是現在的問題。",
+          fan: "風扇是冷卻用的，和板子有沒有固定好無關。",
+          screen: "螢幕只能看數字，不能把板子固定好。",
+          spool: "線材卷和列印平台沒有關係。",
+          release: "有一項讀數顯示板子沒有固定好。板子一晃，第一層就會被拖歪、黏不牢，印到一半可能整個移位。"
+        }
+      },
+      answerKeys: [],
+      learn: "第一層要黏得好，列印板必須確實固定在加熱床上。磁吸式列印板要整片吸平；有時會忘了吸上去，或有一個角沒壓好。確認板子固定之後，再用紙張法看四角間隙是否一致，差太多才需要轉調平旋鈕。",
+      hints: ["四個角的間隙數字看起來怎麼樣？再把其他讀數一項一項看過，有沒有哪一項不是「正常」的？", "問題出在平台上那片可以拆下來的板子，不在機器的其他零件。", "那片板子是靠什麼固定在加熱床上的？有沒有確實固定好？"]
+    },
+    env: {
+      kind: "choice", title: "檢核三：環境",
+      prompt: "看讀數：工作環境適合印嗎？",
+      readings: "env",
+      options: [
+        { id: "a", text: "移到較暖、沒有風吹的位置（或加擋風罩），等平台升到目標溫度再放行", correct: true },
+        { id: "b", text: "把平台目標溫度改成最高，硬加熱上去", why: "PLA 受熱太高會軟化變形，平台也可能受損，而且環境太冷時加熱效率很差。" },
+        { id: "c", text: "不管它，直接開始印，印出來再看", why: "平台溫度不夠、又有冷風直吹，第一層容易黏不牢，會翹邊或脫落。" },
+        { id: "d", text: "把列印速度調快，用速度補回來", why: "速度不能補償溫度不足，反而讓第一層更不穩。" }
+      ],
+      answerKeys: ["較暖", "擋風", "等平台升到"],
+      learn: "環境太冷、有冷風，平台升不到目標溫度，第一層就容易翹邊。先改善環境（移到較暖、避開風口或加擋風罩），再等溫度到位。",
+      hints: ["比一比「平台目標溫度」和「實際溫度」。", "問題出在環境：冷、還有風。", "不是用機器的設定去硬撐，而是先改善環境。"]
+    },
+    watch: {
+      kind: "choice", title: "列印巡檢",
+      prompt: "列印到第 5 層，公仔底座的右前角開始翹起，離開平台了。你要怎麼處理？",
+      options: [
+        { id: "a", text: "暫停列印，清潔平台、確認磁吸板固定好並檢查調平與溫度，加上 brim（外圈）增加附著後重印", correct: true },
+        { id: "b", text: "把噴嘴溫度調到 260℃", why: "噴嘴溫度太高會更容易牽絲、表面變差，並不能讓翹起的邊角黏回平台。" },
+        { id: "c", text: "加快列印速度，趕快把後面的層蓋上去壓住", why: "翹起的地方會越來越嚴重，速度快只會讓它更不穩。" },
+        { id: "d", text: "不管它，繼續印，等印完再說", why: "翹起的地方會越翹越高，可能撞到噴頭，甚至整個公仔從平台上脫落。" }
+      ],
+      answerKeys: ["brim", "暫停"],
+      learn: "翹邊是底部附著不足。發現就要停下來處理根本原因：清潔平台、確認磁吸板有吸好、檢查調平與溫度，並加大底部接觸面積（brim），不要硬印下去。",
+      hints: ["邊角翹起代表底部「黏不住」。", "繼續印、加速或加溫，都不會讓它黏回去。", "要先停下來，並且增加底部的接觸面積。"]
+    },
+    post: {
+      kind: "choice", title: "取件與素模處理",
+      prompt: "公仔印好了，帽簷下還連著支撐。接下來怎麼取件與處理素模（還沒上色的模型）？",
+      options: [
+        { id: "a", text: "等平台冷卻再取下，用斜口鉗剪掉支撐，砂紙由粗到細打磨", correct: true },
+        { id: "b", text: "趁熱用力撬下來，再直接用手把支撐扯掉", why: "趁熱撬容易把底部撕破，還可能燙傷；硬扯支撐會留下坑洞。" },
+        { id: "c", text: "先上色，再打磨表面", why: "打磨會把剛上好的顏色磨掉，順序反了。" },
+        { id: "d", text: "用熱風槍把表面燙平", why: "PLA 受熱會軟化變形，公仔的造型會走樣。" }
+      ],
+      answerKeys: ["冷卻", "斜口鉗", "由粗到細"],
+      learn: "素模處理的順序：冷卻後取下 → 剪除支撐 → 打磨（砂紙由粗到細）→ 才上色。每一步都要避免傷到模型，也要注意自己的安全。",
+      hints: ["剛印完的東西很燙，也比較軟。", "取下、拆支撐、打磨，要用合適的工具，不能硬來。", "打磨是在「上色之前」，而且砂紙的粗細有順序。"]
+    },
+    paint: {
+      kind: "choice", title: "上色",
+      prompt: "素模處理好了，現在要上色。哪一個做法正確？",
+      options: [
+        { id: "a", text: "先噴底漆，再上壓克力顏色，最後噴透明保護漆；在通風處操作", correct: true },
+        { id: "b", text: "直接厚塗一次，顏色蓋過去就好", why: "一次塗太厚容易流淌、積漆，也蓋不住表面的層紋。" },
+        { id: "c", text: "先噴透明漆，再上顏色", why: "透明漆是最後用來覆蓋、守護顏色的，先噴會讓後面的顏色附著不牢。" },
+        { id: "d", text: "關上教室窗戶，在座位旁直接噴漆", why: "噴漆有氣味也有細小粉塵，要在空氣流通的地方，並讓旁邊的人離遠一點。" }
+      ],
+      answerKeys: ["底漆", "保護漆", "通風處"],
+      learn: "上色的順序：底漆（讓顏色附著、遮住層紋）→ 分層薄塗顏色 → 透明保護漆。噴漆一定要在通風處，旁邊的人要離遠。",
+      hints: ["有「打底」「上色」「保護」三個層次，順序很重要。", "一次塗厚、順序顛倒，都會讓顏色出問題。", "別忘了噴漆的安全：空氣要流通。"]
+    }
+  },
+
+  /* ---- 檢核讀數（由上面的數字產生；「⚠」不會直接顯示，要學生自己判讀）---- */
+
+  msg: {
+    cooling: "清理噴頭中… {n} 秒",
+    lock: "同一步答錯 {n} 次，機器暫停了。請找關主協助。",
+    wrongHead: "這個選擇不對：",
+    stepLocked: "請先完成目前這一步。"
+  },
+
+  /* ---- 完成後的回顧題（選做，不影響過關）---- */
+  review: [
+    {
+      q: "什麼情況下，光固化（樹脂）會比 FDM 更合適？",
+      options: [
+        { id: "r1", text: "要做很小、細節很多的作品，而且有通風與防護（手套、洗淨與二次固化）可用", correct: true, why: "沒錯！光固化的細節很細緻，但要有安全措施，所以不一定適合教室現場。" },
+        { id: "r2", text: "任何時候都比 FDM 好，因為它比較新", why: "沒有誰一定比較好，要看作品需求和使用環境。" },
+        { id: "r3", text: "想省錢、想要東西很大的時候", why: "大型作品與低成本通常是 FDM 的強項。" },
+        { id: "r4", text: "在教室讓很多學生圍著操作的時候", why: "樹脂有氣味、要戴手套，圍很多人操作不安全。" }
+      ]
+    },
+    {
+      q: "為什麼開始列印前，要先做「耗材、板子、環境」三項檢核？",
+      options: [
+        { id: "k1", text: "三項只要有一項不正常，就很容易印到一半失敗，浪費時間與材料", correct: true, why: "對！印前多檢查幾分鐘，可以省下失敗重印的幾個小時。" },
+        { id: "k2", text: "只是形式，不檢查也一樣印得好", why: "沒檢查就印，缺料、黏不牢或太冷都可能讓作品失敗。" },
+        { id: "k3", text: "檢查是為了讓列印速度變快", why: "檢查的目的不是加速，而是避免失敗。" },
+        { id: "k4", text: "因為檢查完機器才會通電", why: "機器通不通電和檢查無關。" }
+      ]
+    },
+    {
+      q: "第一關的守護機器人和這一關的公仔，有什麼共同的觀念？",
+      options: [
+        { id: "m1", text: "都要先想清楚哪裡會懸空、哪裡要加寬底座，再決定支撐怎麼放", correct: true, why: "沒錯！懸空、底座、支撐是 3D 列印最基本的結構觀念。" },
+        { id: "m2", text: "都是把支撐全部打開最保險", why: "支撐太多會浪費材料，還會讓表面很難處理。" },
+        { id: "m3", text: "都不需要考慮材料和環境", why: "材料與環境會直接影響列印是否成功。" },
+        { id: "m4", text: "都只靠運氣", why: "3D 列印靠的是理解原理和先檢查，不是運氣。" }
+      ]
+    }
+  ]
+};
+
+</script>
+<style>
+:root{
+  --bg:#0a1a33; --panel:#13233f; --panel2:#1a2f52; --line:#2f5086; --text:#ffffff; --sub:#b9cbe8;
+  --orange:#ff8a1f; --orange2:#ffb066; --green:#39ff88; --red:#ff4d5e; --blue:#5aa9ff; --amber:#ffd24d;
+  --r:16px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Heiti TC",system-ui,sans-serif;font-size:18px;line-height:1.55}
+body{
+  background-image:linear-gradient(rgba(90,150,230,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(90,150,230,.16) 1px,transparent 1px),
+    linear-gradient(rgba(90,150,230,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(90,150,230,.07) 1px,transparent 1px);
+  background-size:96px 96px,96px 96px,16px 16px,16px 16px;
+}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+#app{max-width:1180px;margin:0 auto;padding:10px 14px 90px;min-height:100dvh;display:flex;flex-direction:column;gap:12px}
+
+/* 上方列 */
+.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:6;background:rgba(10,26,51,.94);padding:6px 4px;margin:0 -4px;border-radius:0 0 12px 12px}
+.brand{display:flex;flex-direction:column;line-height:1.2}
+.brand b{font-size:24px;letter-spacing:.04em}.brand span{font-size:15px;color:var(--orange2)}
+.chips{display:flex;gap:6px;flex:1;justify-content:center;flex-wrap:wrap}
+.chip{padding:5px 14px;border-radius:99px;border:2px solid var(--line);color:var(--sub);font-size:16px;white-space:nowrap}
+.chip.on{background:var(--orange);border-color:var(--orange);color:#1a0d00;font-weight:800}
+.chip.fin{border-color:var(--green);color:var(--green)}
+.badge{padding:5px 12px;border-radius:10px;font-size:16px;font-weight:700;border:2px solid var(--line);background:var(--panel)}
+.badge.done{border-color:var(--green);color:var(--green);box-shadow:0 0 14px rgba(57,255,136,.4)}
+#gear{width:52px;height:52px;border-radius:50%;border:2px solid var(--line);background:var(--panel);font-size:24px;position:relative;opacity:.8;padding:0}
+#gear .ring{position:absolute;inset:-5px;border-radius:50%;background:conic-gradient(var(--orange) var(--p,0deg),transparent 0);-webkit-mask:radial-gradient(circle,transparent 60%,#000 62%);mask:radial-gradient(circle,transparent 60%,#000 62%);pointer-events:none}
+
+/* 面板 */
+.panel{background:linear-gradient(180deg,var(--panel2),var(--panel));border:2px solid var(--line);border-radius:var(--r);padding:16px;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.panel h2{margin:0 0 8px;font-size:23px}.panel h3{margin:0 0 6px;font-size:19px;color:var(--orange2)}
+.panel p{margin:6px 0}
+.sub{color:var(--sub);font-size:16px}
+.grid2{display:grid;grid-template-columns:1.15fr 1fr;gap:12px}
+@media (max-width:860px){.grid2{grid-template-columns:1fr}#app{padding-bottom:100px}.brand b{font-size:20px}}
+@media (max-width:640px){.top{gap:6px}.brand{flex:1;min-width:0}.brand b{font-size:18px}.brand span{font-size:12px}.chips{order:5;flex-basis:100%;gap:4px}.chip{padding:3px 10px;font-size:14px;flex:1;text-align:center}#gear{width:46px;height:46px}.badge{padding:4px 8px;font-size:14px}.panel{padding:12px}.readout{font-size:32px}.codebox .code{font-size:56px}}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.spread{justify-content:space-between}
+
+/* 按鈕 */
+.btn{min-height:58px;padding:10px 22px;border-radius:14px;border:0;background:var(--orange);color:#1a0d00;font-weight:800;font-size:21px;box-shadow:0 4px 0 #a85509}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 #a85509}
+.btn.ghost{background:transparent;color:var(--text);border:2px solid var(--line);box-shadow:none;font-weight:600}
+.btn.green{background:var(--green);box-shadow:0 4px 0 #1b9b52}
+.btn[disabled]{background:#3a465c;color:#8e9bb3;box-shadow:none;cursor:not-allowed;transform:none}
+.btn.big{width:100%;min-height:68px;font-size:24px}
+.btn.small{min-height:44px;font-size:16px;padding:6px 14px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.opt{min-height:62px;padding:8px 10px;border-radius:12px;border:2px solid var(--line);background:#0e1c34;font-size:17px;text-align:center;line-height:1.3}
+.opt.on{border-color:var(--orange);background:rgba(255,138,31,.2);font-weight:800;box-shadow:0 0 0 2px var(--orange) inset}
+.opt[disabled]{opacity:.55;cursor:not-allowed}
+.optgrid{display:grid;grid-template-columns:1fr;gap:8px}
+.setting{margin-bottom:10px}.setting>b{display:block;margin-bottom:4px;color:var(--orange2)}
+
+/* SVG */
+svg{display:block;width:100%;height:auto}
+.ground{stroke:#6f8fbf;stroke-width:2}
+.solid{fill:#2a4a80;stroke:#9cc4ff;stroke-width:2}
+.accent{fill:#143258;stroke:var(--amber);stroke-width:2}
+.led{fill:var(--green)}
+.dash{stroke:var(--amber);stroke-width:2;stroke-dasharray:5 4}
+.dim{stroke:#9cc4ff;stroke-width:1.5;fill:none}
+.arc{stroke:var(--amber);stroke-width:2}
+.note{fill:var(--amber);font-size:14px;font-weight:700}
+.cap{fill:var(--sub);font-size:15px}
+.contact{fill:none;stroke:var(--orange);stroke-width:2;stroke-dasharray:3 2}
+.bed2{fill:rgba(255,255,255,.04);stroke:#38598f;stroke-dasharray:6 5}
+.hit{fill:transparent;stroke:none}
+.view3 .part{cursor:pointer;outline:none}
+.view3 .part:hover .solid,.view3 .part:focus-visible .solid{stroke:#fff}
+.view3 .part.marked .solid,.view3 .part.marked .contact{stroke:var(--orange);stroke-width:4;fill:rgba(255,138,31,.35);filter:drop-shadow(0 0 6px var(--orange))}
+.view3 .part.marked .contact{fill:var(--orange)}
+.ledge{stroke-width:16;stroke-linecap:butt}.ok-ledge{stroke:var(--green)}.bad-ledge{stroke:var(--red)}
+.ref45{stroke:var(--amber);stroke-width:2;stroke-dasharray:6 5}
+.noodle{fill:none;stroke:#ff9d6e;stroke-width:9;stroke-linecap:round;stroke-linejoin:round}
+.noodle.bad{stroke:var(--red)}
+.okt{fill:var(--green);font-weight:700}.badt{fill:#ff8d97;font-weight:700}
+.lattice{fill:none;stroke:#7fe3ff;stroke-width:2.5;stroke-dasharray:5 3}.lattice.waste{stroke:#ff9d6e}
+.crack{fill:none;stroke:var(--red);stroke-width:3}
+.scratch{fill:none;stroke:var(--red);stroke-width:2}
+.scene{background:radial-gradient(ellipse at 50% 100%,rgba(90,150,230,.18),transparent 70%);border-radius:12px}
+.bed{fill:#4a5b7a;stroke:#9db2d6;stroke-width:2}.bedt{fill:#d7e3f8;font-size:10px}
+.rail{stroke:#8aa4d0;stroke-width:3}.carr{fill:#3b5f9c;stroke:#9cc4ff}.nozzle{fill:var(--orange)}
+.lab{fill:var(--orange2);font-size:15px;font-weight:700}
+.led2{stroke:#0004;stroke-width:1}.led2.off{fill:#445}.led2.heat{fill:var(--orange)}.led2.green{fill:var(--green);filter:drop-shadow(0 0 5px var(--green))}.led2.red{fill:var(--red);filter:drop-shadow(0 0 5px var(--red))}
+.snap{fill:var(--red);font-weight:900}
+.hlbox{stroke:var(--orange);stroke-width:3;stroke-dasharray:8 5;animation:pulse 1.2s ease-in-out infinite}
+.bad{stroke:var(--red)!important;animation:flash .5s ease-in-out 4}
+.demo{background:rgba(255,255,255,.04);border-radius:12px}
+.hatch{animation:none}
+.peg{fill:var(--amber);stroke:#0006;stroke-width:1}.seam{stroke:var(--amber);stroke-width:2;stroke-dasharray:3 2}
+.hole{fill:#06101f;stroke:#9cc4ff;stroke-width:2}.glue{fill:var(--orange2)}
+@keyframes slidein{0%,15%{transform:translateX(30px)}55%,100%{transform:translateX(-20px)}}
+.slidein{animation:slidein 3.6s ease-in-out infinite}
+@keyframes slidein2{0%,15%{transform:translateX(26px)}55%,100%{transform:translateX(0)}}
+.slidein2{animation:slidein2 3.6s ease-in-out infinite}
+
+/* 動畫 */
+@keyframes pulse{50%{opacity:.35}}
+@keyframes flash{50%{filter:drop-shadow(0 0 8px var(--red));fill:rgba(255,77,94,.55)}}
+@keyframes droop{0%,30%{transform:rotate(0)}70%,100%{transform:rotate(50deg)}}
+.droop{animation:droop 3.2s ease-in-out infinite}
+@keyframes armfall{0%,45%{transform:rotate(0)}70%,100%{transform:rotate(20deg) translateY(4px)}}
+.armfall{animation:armfall 3.6s ease-in infinite}
+@keyframes crackin{0%,55%{opacity:0}70%,100%{opacity:1}}
+.demo .crack{animation:crackin 3.6s infinite}
+@keyframes wob{0%,40%{transform:rotate(0)}70%{transform:rotate(9deg)}100%{transform:rotate(60deg) translateY(10px)}}
+.wobble{animation:wob 3.4s ease-in infinite}
+@keyframes steady{50%{transform:translateY(-3px)}}
+.steady{animation:steady 1.6s ease-in-out infinite}
+@keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+.shake{animation:shake .4s}
+@keyframes pop{0%{transform:scale(.8);opacity:0}100%{transform:scale(1);opacity:1}}
+.pop{animation:pop .35s ease-out}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  .droop{transform:rotate(50deg)}.armfall{transform:rotate(20deg) translateY(4px)}.wobble{transform:rotate(60deg) translateY(10px)}.slidein{transform:translateX(-20px)}
+}
+
+/* 範圍滑桿 */
+input[type=range]{width:100%;height:56px;touch-action:none;accent-color:var(--orange);background:transparent}
+input[type=range]::-webkit-slider-thumb{width:44px;height:44px}
+input[type=range]::-moz-range-thumb{width:44px;height:44px}
+.readout{font-size:40px;font-weight:900;color:var(--amber);text-align:center;letter-spacing:.02em}
+.verdict{font-size:20px;font-weight:800;text-align:center;min-height:32px}
+.verdict.ok{color:var(--green)}.verdict.bad{color:#ff8d97}
+
+/* 診斷 */
+.tabs{display:flex;gap:8px;margin-bottom:8px}
+.tab{flex:1;min-height:52px;border-radius:12px;border:2px solid var(--line);background:#0e1c34;font-size:18px;font-weight:700}
+.tab.on{border-color:var(--orange);background:rgba(255,138,31,.2)}
+.tab.seen::after{content:" ✓";color:var(--green)}
+.partchips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0}
+.pchip{min-height:56px;border-radius:12px;border:2px solid var(--line);background:#0e1c34;font-size:18px;font-weight:700}
+.pchip.on{border-color:var(--orange);background:rgba(255,138,31,.25)}
+.reasons{display:grid;gap:8px;margin-top:6px}
+.reasons .opt{text-align:left;padding:10px 14px}
+.reasons .opt.good{border-color:var(--green);background:rgba(57,255,136,.15)}
+.reasons .opt.wrong{border-color:var(--red);background:rgba(255,77,94,.15)}
+
+/* 結果 */
+.res2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+@media (max-width:560px){.res2{grid-template-columns:1fr}}
+.rescard{border-radius:12px;border:2px solid var(--line);padding:10px 12px;background:#0e1c34}
+.rescard.pass{border-color:var(--green)}.rescard.fail{border-color:var(--red);background:rgba(255,77,94,.1)}
+.rescard b{display:block;font-size:19px}.rescard.pass b{color:var(--green)}.rescard.fail b{color:#ff8d97}
+.note-box{border-left:5px solid var(--amber);background:rgba(255,210,77,.1);padding:8px 12px;border-radius:8px;margin-top:8px}
+.msg{min-height:28px;margin-top:8px;font-size:18px}
+.msg.bad{color:#ff9aa3}.msg.good{color:var(--green)}.msg.info{color:var(--amber)}
+
+/* 成功 */
+.codebox{margin:10px 0;padding:14px;border:3px dashed var(--green);border-radius:16px;text-align:center;background:rgba(57,255,136,.08)}
+.codebox .code{font-size:72px;font-weight:900;letter-spacing:.2em;color:var(--green);text-shadow:0 0 18px rgba(57,255,136,.6);line-height:1.1}
+.icon-laser{width:120px;margin:0 auto}
+
+/* 底部列 */
+.foot{position:fixed;left:0;right:0;bottom:0;padding:8px 14px calc(8px + env(safe-area-inset-bottom));background:linear-gradient(0deg,#07122b 70%,transparent);display:flex;gap:10px;align-items:center;justify-content:center;z-index:5}
+.foot .info{position:absolute;left:14px;bottom:4px;font-size:12px;color:#6f86ab;pointer-events:none}
+#hintsheet{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);width:min(680px,94vw);z-index:8;background:#0f2a3f;border:3px solid var(--amber);border-radius:16px;padding:12px 16px;box-shadow:0 10px 30px #000a}
+#hintsheet .lv{color:var(--amber);font-weight:800}
+#toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:30;max-width:92vw;padding:10px 18px;border-radius:12px;font-weight:700;background:#102b4d;border:2px solid var(--line);box-shadow:0 8px 24px #000a}
+#toast.bad{border-color:var(--red);background:#3a1620}#toast.good{border-color:var(--green)}
+
+/* 覆蓋層 */
+.overlay{position:fixed;inset:0;z-index:20;background:rgba(5,12,28,.88);display:flex;align-items:center;justify-content:center;padding:16px}
+.overlay .box{max-width:560px;width:100%;background:var(--panel);border:3px solid var(--orange);border-radius:20px;padding:20px;text-align:center}
+.overlay.lock .box{border-color:var(--red)}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.keypad button{min-height:60px;font-size:26px;border-radius:12px;border:2px solid var(--line);background:#0e1c34}
+.pindots{font-size:34px;letter-spacing:.4em;min-height:48px}
+.stepper{display:flex;align-items:center;justify-content:center;gap:14px;margin:8px 0}
+.stepper button{width:56px;height:56px;border-radius:12px;border:2px solid var(--line);background:#0e1c34;font-size:28px}
+.stepper output{font-size:40px;font-weight:900;min-width:70px}
+
+/* 測試面板 */
+.testpanel{background:#06101f;border:2px solid var(--blue);border-radius:12px;padding:8px 12px;font-size:14px;max-height:46vh;overflow:auto}
+.testpanel summary{font-weight:800;cursor:pointer}.testpanel ul{margin:6px 0 0;padding-left:18px}
+.testpanel .good{color:var(--green)}.testpanel .bad{color:#ff8d97}
+.hidden{display:none!important}
+
+/* ===== 第二站：3D 場景 ===== */
+.stagewrap{position:relative}
+.stage3d{position:relative;aspect-ratio:4/3;width:100%;overflow:hidden;border-radius:14px;border:2px solid var(--line);
+  background:radial-gradient(ellipse at 50% 85%,rgba(90,150,230,.28),transparent 70%),linear-gradient(180deg,#0b1c38,#0d2447);cursor:grab;user-select:none;-webkit-user-select:none}
+.stage3d:active{cursor:grabbing}
+.stage3d::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 40%,transparent 35%,rgba(90,170,255,var(--cold,0)) 100%)}
+.stage3d .grp.vp{position:absolute;left:50%;top:50%;width:0;height:0;perspective:1100px;transform:scale(var(--u,1))}
+.stage3d .cam,.stage3d .world,.stage3d .grp,.stage3d .cb{position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d}
+.stage3d *{pointer-events:none}
+.stage3d .obj .f,.stage3d .obj .disc{pointer-events:auto;cursor:pointer}
+.stage3d .f{position:absolute;background:var(--c,#789);backface-visibility:hidden;box-sizing:border-box}
+.stage3d .f.top{filter:brightness(1.18)}.stage3d .f.right{filter:brightness(.82)}.stage3d .f.left{filter:brightness(.68)}.stage3d .f.back{filter:brightness(.6)}.stage3d .f.bottom{filter:brightness(.45)}
+.stage3d .table .f{background-image:repeating-linear-gradient(90deg,rgba(0,0,0,.1) 0 2px,transparent 2px 22px)}
+.stage3d .wall .f{background-image:linear-gradient(rgba(90,150,230,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(90,150,230,.12) 1px,transparent 1px);background-size:30px 30px}
+.stage3d .win .f{border:3px solid #e8f1ff}
+.stage3d .thermo .f.front{background:#e8eefb}
+.th{position:relative;width:100%;height:100%;color:#1a2f55;font-size:9px;font-weight:800;text-align:center}
+.th i{position:absolute;left:13px;top:10px;bottom:22px;width:8px;border-radius:4px;background:linear-gradient(0deg,#4aa3ff 0 22%,#cfd8ea 22%)}
+.th b{position:absolute;left:0;right:0;bottom:4px}
+.stage3d .screen .f.front{background:#0a1a30;overflow:hidden}
+.scr{font-size:9px;line-height:1.45;color:#7fffd4;padding:4px 5px;font-weight:700}.scr b{display:block}.scr i{font-style:normal;color:#ffd24d}.scr .lowtemp{color:#ff8d97}
+.stage3d .bed .f.top{background-image:linear-gradient(rgba(255,255,255,.1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.1) 1px,transparent 1px);background-size:22px 22px}
+.stage3d .tip .f{background:var(--c,#ff8a1f)}
+.stage3d .disc{position:absolute;border-radius:50%;backface-visibility:visible}
+.stage3d .disc.flange{box-shadow:inset 0 0 0 3px #8aa4d0}.stage3d .disc.wire{box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}.stage3d .disc.hub{box-shadow:inset 0 0 0 2px #52688c}
+.stage3d .mark{position:absolute;width:7px;height:7px;left:-3.5px;top:-3.5px;background:#ff8a1f;border-radius:50%}
+.stage3d .fline{position:absolute;height:3px;top:-1.5px;background:#27c3a8;transform-style:flat}
+.stage3d .box .f{background-image:linear-gradient(90deg,transparent 46%,rgba(80,40,0,.25) 46% 54%,transparent 54%)}
+.stage3d .holo .f{background:rgba(90,200,255,var(--ha,.12));border:1.5px solid rgba(127,227,255,var(--hb,1));filter:none}
+.stage3d .holo.done .f{background:rgba(90,200,255,.5)}
+.stage3d .holebad .f{background:#ff4d5e;filter:none}
+.stage3d .scan .f{background:rgba(127,227,255,.4);border:1px solid #bff3ff;filter:none}
+.stage3d .slice .f{background:rgba(90,169,255,.16);border:1px solid rgba(127,227,255,.75);filter:none}
+.stage3d .pl .f{backface-visibility:visible;filter:none}
+.stage3d .scan .f{background:rgba(127,227,255,.35);border:1px solid #bff3ff}
+.stage3d .slice.brimghost .f,.stage3d .slice.supp .f{background:rgba(255,210,77,.35);border-color:#ffd24d}
+.stage3d .part .f{background-color:var(--c,#d9dee9)}
+.stage3d .fig:not(.smooth) .part .f{background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 1px,transparent 1px 3px)}
+.stage3d .fig.smooth.painted .part .f,.stage3d .fig.smooth .part .f{background-image:linear-gradient(115deg,rgba(255,255,255,calc(var(--gl,0)*.55)) 0%,transparent 45%)}
+.stage3d .sup .f{background:#f0c040}
+.stage3d .brimplate .f{background:var(--c,#e9edf5)}
+.stage3d .head .f.front{overflow:hidden}
+.eye{position:absolute;top:8px;width:5px;height:7px;background:#16233f;border-radius:2px;opacity:var(--face,0)}.eye.l{left:9px}.eye.r{right:9px}
+.mouth{position:absolute;left:12px;right:12px;top:19px;height:3px;border-radius:0 0 4px 4px;background:#b8433f;opacity:var(--face,0)}
+.warn3d{position:absolute;left:0;top:0;white-space:nowrap;font-size:12px;font-weight:900;color:#fff;background:#d6303f;padding:2px 8px;border-radius:8px;transform-style:flat}
+.stage3d .turn .f{background:#314b78}
+.stage3d .tl .f,.stage3d .tool .f{filter:none}
+.stage3d .heater.glow .f{box-shadow:0 0 18px #ff6a1a inset}
+.stage3d .shield .f{background:rgba(215,236,255,.28);border:1px solid #eaf5ff;filter:none}
+.stage3d .wind .f{filter:none}
+.stage3d .mist{opacity:.7}
+.stagetools{display:flex;gap:8px;position:absolute;right:8px;top:8px;z-index:3}
+.stagetools .btn.small{min-height:40px;padding:4px 10px;background:rgba(10,26,51,.82)}
+.stagehint{margin:6px 2px 0;text-align:center}
+.pickable .obj .f,.pickable .obj .disc{animation:objp 1s ease-in-out infinite alternate}
+@keyframes objp{from{box-shadow:inset 0 0 0 2px rgba(255,210,77,.15)}to{box-shadow:inset 0 0 0 4px rgba(255,210,77,.95)}}
+@media (prefers-reduced-motion:reduce){.pickable .obj .f,.pickable .obj .disc{animation:none;box-shadow:inset 0 0 0 3px rgba(255,210,77,.9)}}
+
+/* 題目卡 */
+.qcard{border:2px solid var(--line);border-radius:14px;padding:12px;margin:8px 0;background:rgba(10,26,51,.4)}
+.qcard.active{border-color:var(--orange);box-shadow:0 0 0 2px rgba(255,138,31,.25)}
+.qcard.done{border-color:var(--green);color:var(--green);padding:8px 12px}
+.qcard h3{margin:0 0 4px}
+.prompt{font-size:19px;margin:4px 0 8px}
+.readings{width:100%;border-collapse:collapse;margin:6px 0 10px;font-size:17px}
+.readings th{text-align:left;color:var(--orange2);font-weight:700;padding:5px 8px 5px 0;white-space:nowrap;vertical-align:top}
+.readings td{padding:5px 0;border-bottom:1px dashed var(--line)}
+.readings tr:last-child td{border-bottom:0}
+.opt.wrong{border-color:var(--red);background:rgba(255,77,94,.15)}
+.opt.pickopt{font-weight:700}
+.note-box.learn{border-left-color:var(--green);background:rgba(57,255,136,.08)}
+.cdline{color:var(--amber);font-weight:700;min-height:0;font-size:17px}
+.cdline:empty{display:none}
+input[type=text]{min-height:52px;font-size:22px;padding:6px 12px;border-radius:12px;border:2px solid var(--line);background:#0e1c34;color:#fff;width:190px;letter-spacing:.2em;text-align:center}
+.busyview .opt,.busyview .btn{pointer-events:none}
+
+@media (min-width:861px){.stickycol{position:sticky;top:78px;align-self:start}}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="brand"><b id="brandT"></b><span id="brandS"></span></div>
+    <div class="chips" id="chips"></div>
+    <span class="badge" id="grp"></span>
+    <span class="badge done hidden" id="donebadge">✔ 已完成</span>
+    <button id="gear" aria-label="關主（長按 3 秒）" title="關主專用：長按 3 秒"><span class="ring"></span>⚙</button>
+  </header>
+  <main id="main"></main>
+</div>
+<div class="foot"><button class="btn ghost hidden" id="hintbtn"></button><span class="info" id="info"></span></div>
+<div id="hintsheet" class="hidden" role="status"></div>
+<div id="toast" class="hidden" role="status" aria-live="polite"></div>
+<div id="lock" class="overlay lock hidden"><div class="box"><h2>🔒 機器暫停</h2><p id="lockmsg"></p>
+  <button class="btn ghost" id="lockhold" style="width:100%;position:relative"><span class="ring" style="position:absolute;inset:-4px;border-radius:18px;background:conic-gradient(var(--orange) var(--p,0deg),transparent 0);-webkit-mask:linear-gradient(#000 0 0);pointer-events:none;opacity:.35"></span>關主：長按 3 秒解鎖</button></div></div>
+<div id="adm" class="overlay hidden"></div>
+<script id="anim">
+/* =====================================================================
+   動畫時間軸（純函式，不碰畫面）：把「做到哪一步、動畫播到幾 %」換成 3D 場景的狀態
+   ===================================================================== */
+const Anim = (() => {
+  "use strict";
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+  const seg = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
+  const tri = (t) => 1 - Math.abs(2 * t - 1);
+
+  /* 場景所有會變的量（全部 0～1，除非另外註明） */
+  const DEFAULT = Object.freeze({
+    mesh: 0,       // 模型：0＝線框（未檢查）→ 1＝實心（已修補）
+    scan: 0,       // 檢查掃描線位置（動畫中才有值）
+    pkg: 0,        // 包裹送到桌上
+    pkgOpen: 0,    // 包裹打開，露出新線材卷
+    plan: 0,       // 切片規劃：藍色層線、底座與支撐的預覽
+    spoolSwap: 0,  // 0＝舊的少量線材卷在機器上；1＝換成新卷
+    feed: 0,       // 線材已送進噴頭
+    level: 0,      // 0＝平台傾斜（不平）→ 1＝已調平
+    warm: 0,       // 環境改善（冷風消失、變暖）
+    bedHeat: 0,    // 平台溫度：0＝冷、依環境的實際值…；以 warm 與此值共同決定
+    print: 0,      // 列印進度
+    warp: 0,       // 底座右前角翹起
+    brimBig: 0,    // 加大外圈 brim
+    park: 0,       // 噴頭停靠
+    lift: 0,       // 成品取下
+    cut: 0,        // 支撐已剪掉（動畫中顯示斜口鉗）
+    sand: 0,       // 打磨（動畫中顯示砂紙）
+    paint: 0,      // 上色進度（動畫中顯示噴槍）
+    gloss: 0       // 保護漆光澤
+  });
+
+  /* 每個「做對了」會播的動畫：t = 0～1 → 要改的量 */
+  const PATCH = {
+    design:    (t) => ({ scan: t >= 1 ? 0 : tri(seg(t, 0, 0.9)), mesh: seg(t, 0.15, 0.9) }),
+    buy:       (t) => ({ pkg: seg(t, 0, 0.45), pkgOpen: seg(t, 0.5, 0.9) }),
+    slice:     (t) => ({ plan: seg(t, 0, 0.85) }),
+    filament:  (t) => ({ spoolSwap: seg(t, 0, 0.55), feed: seg(t, 0.55, 1) }),
+    plate:     (t) => ({ level: seg(t, 0, 0.9) }),
+    env:       (t) => ({ warm: seg(t, 0, 0.55), bedHeat: seg(t, 0.35, 1) }),
+    startPrint:(t) => ({ print: 0.14 * seg(t, 0, 0.8), warp: seg(t, 0.8, 1) }),
+    watch:     (t) => ({ warp: 1 - seg(t, 0, 0.25), park: tri(seg(t, 0.05, 0.4)), brimBig: seg(t, 0.25, 0.4), print: 0.14 + 0.86 * seg(t, 0.42, 1) }),
+    post:      (t) => ({ bedHeat: 1 - seg(t, 0, 0.2), lift: seg(t, 0.2, 0.45), cut: seg(t, 0.45, 0.7), sand: seg(t, 0.7, 1) }),
+    paint:     (t) => ({ paint: seg(t, 0, 0.8), gloss: seg(t, 0.8, 1) })
+  };
+  /* 動畫進行中，工具（斜口鉗、砂紙、噴槍）只在過程中出現：用「做到一半」判斷 */
+  const ORDER = ["design", "buy", "slice", "filament", "plate", "env", "startPrint", "watch", "post", "paint"];
+  const KEYS = ORDER.slice();
+  const finalOf = (k) => PATCH[k](1);
+  const merge = (a, b) => Object.assign({}, a, b);
+
+  /* 目前已完成的項目（對照存檔） */
+  function doneKeys(done, started) {
+    const r = ORDER.filter((k) => (k === "startPrint" ? !!started : !!(done && done[k])));
+    return r;
+  }
+  /* 場景狀態：已完成的項目都是「完成後的樣子」；exclude 的項目播到 t */
+  function stateFor(done, started, active, t) {
+    let s = Object.assign({}, DEFAULT);
+    doneKeys(done, started).forEach((k) => { if (k !== active) s = merge(s, finalOf(k)); });
+    if (active && PATCH[active]) s = merge(s, PATCH[active](clamp(t == null ? 1 : t, 0, 1)));
+    return s;
+  }
+
+  /* 鏡頭：自動推近到每一步的重點。focus=世界座標(x,y,z)，y 往上 */
+  const CAM = {
+    intro:      { ry: -32, rx: -20, z: 1.0, f: [0, 70, 0] },
+    design:     { ry: -22, rx: -14, z: 1.75, f: [0, 92, 0] },
+    buy:        { ry: -42, rx: -22, z: 1.55, f: [-120, 24, 60] },
+    slice:      { ry: -26, rx: -14, z: 1.75, f: [0, 92, 0] },
+    filament:   { ry: -46, rx: -16, z: 1.8, f: [140, 110, -10] },
+    plate:      { ry: -18, rx: -26, z: 1.9, f: [30, 46, 50] },
+    env:        { ry: -24, rx: -16, z: 1.1, f: [0, 100, -40] },
+    startPrint: { ry: -26, rx: -18, z: 1.9, f: [0, 70, 0] },
+    watch:      { ry: -30, rx: -20, z: 2.0, f: [0, 62, 0] },
+    post:       { ry: -24, rx: -14, z: 1.9, f: [-78, 50, 108] },
+    paint:      { ry: -20, rx: -12, z: 2.0, f: [-78, 52, 108] },
+    done:       { ry: -22, rx: -12, z: 2.0, f: [-78, 52, 108] }
+  };
+
+  /* 動畫時間長度倍率（巡檢動畫較長） */
+  const DUR = { watch: 1.4, post: 1.3, paint: 1.2 };
+
+  return { DEFAULT, PATCH, ORDER, KEYS, CAM, DUR, finalOf, doneKeys, stateFor, seg, clamp };
+})();
+
+</script>
+<script id="logic">
+/* =====================================================================
+   遊戲邏輯層：不碰畫面的純函式。reduce(state, action, now) → {state, fb}
+   ===================================================================== */
+const Logic = (() => {
+  "use strict";
+  const C = CONFIG;
+  const STEPS = C.steps, Q = C.questions;
+  const QIDS = STEPS.flatMap((s) => s.qs);
+  const stepOfQ = {}; STEPS.forEach((s, i) => s.qs.forEach((q) => { stepOfQ[q] = i; }));
+  const GATE = STEPS.findIndex((s) => s.gate);
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+
+  const esc = (s) => String(s).replace(/[&<>"'`]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;" }[ch]));
+
+  /* 可重現的洗牌（同一個種子順序固定，重整不會變） */
+  function rng(seed) { let a = (seed >>> 0) || 1; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  function shuffle(arr, seed) {
+    const a = arr.slice(); const r = rng(seed);
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+  const hash = (str) => { let h = 7; for (let i = 0; i < str.length; i++) h = (Math.imul(h, 31) + str.charCodeAt(i)) >>> 0; return h; };
+
+  const codeFor = (group) => { const l = C.groupCodes; return l[(((group | 0) - 1) % l.length + l.length) % l.length]; };
+  const checkPin = (pin) => String(pin) === String(C.masterPin);
+  const cooldownLeft = (s, now) => Math.max(0, s.cooldownUntil - now);
+
+  /* ---------- 題目輔助 ---------- */
+  function optionIds(qid) {
+    const q = Q[qid];
+    return q.kind === "choice" ? q.options.map((o) => o.id) : q.pick.objs.concat(["release"]);
+  }
+  const isCorrect = (qid, opt) => { const q = Q[qid]; return q.kind === "choice" ? !!q.options.find((o) => o.id === opt && o.correct) : opt === q.pick.correct; };
+  function whyOf(qid, opt) {
+    const q = Q[qid];
+    if (q.kind === "choice") { const o = q.options.find((x) => x.id === opt); return o ? (o.why || "") : ""; }
+    return q.pick.why[opt] || "";
+  }
+  /* 玩家看到的選項（順序依種子打亂，重整不變）；pick 題回傳物件 id */
+  function optionsOf(st, qid) {
+    const q = Q[qid];
+    if (q.kind === "choice") return shuffle(q.options.map((o) => ({ id: o.id, text: o.text })), st.seed + hash(qid));
+    return shuffle(q.pick.objs.map((id) => ({ id, text: C.objects[id].name })).concat([{ id: "release", text: "沒問題，放行" }]), st.seed + hash(qid));
+  }
+  const reviewOptions = (st, qi) => shuffle(C.review[qi].options.map((o) => ({ id: o.id, text: o.text })), st.seed + 101 + qi * 7);
+
+  /* ---------- 檢核讀數（由 CONFIG 的數字產生；flag 只給測試用，畫面不顯示） ---------- */
+  function readings(qid) {
+    const f = C.fila, p = C.plate, e = C.env, g = p.gaps;
+    if (qid === "filament") return [
+      { label: "線材種類", value: "PLA", abnormal: false },
+      { label: "受潮狀況", value: "乾燥，沒有爆音", abnormal: false },
+      { label: "線材卷剩餘", value: f.remainG + " g", abnormal: f.remainG < f.needG },
+      { label: "這隻公仔預估用量", value: f.needG + " g", abnormal: false }
+    ];
+    if (qid === "plate") {
+      const vals = [g.lf, g.rf, g.lb, g.rb]; const spread = Math.max.apply(null, vals) - Math.min.apply(null, vals);
+      return [
+        { label: "平台材質", value: "PEI 彈性片（磁吸式，吸在加熱床上）", abnormal: false },
+        { label: "表面狀態", value: "乾淨，沒有指紋油汙", abnormal: false },
+        { label: "四角間隙（紙張法）", value: "左前 " + g.lf.toFixed(2) + "、右前 " + g.rf.toFixed(2) + "、左後 " + g.lb.toFixed(2) + "、右後 " + g.rb.toFixed(2) + " mm（差距在容許內）", abnormal: spread > p.tol },
+        { label: "板子固定狀況", value: p.seated ? "整片吸平，推不動" : "右前角輕按會翹動，邊緣有縫隙，一推就滑", abnormal: !p.seated }
+      ];
+    }
+    if (qid === "env") return [
+      { label: "室溫", value: e.room + " ℃", abnormal: false },
+      { label: "平台目標溫度", value: e.bedTarget + " ℃", abnormal: false },
+      { label: "平台目前溫度", value: e.bedNow + " ℃（升溫很慢）", abnormal: e.bedNow < e.bedTarget },
+      { label: "擺放位置", value: "窗邊，冷風直接吹到機器", abnormal: true }
+    ];
+    return [];
+  }
+
+  /* ---------- 初始狀態 ---------- */
+  function initial(group, seed) {
+    const n = C.groupCodes.length; let g = Math.floor(Number(group));
+    if (!(g >= 1 && g <= n)) g = 1;
+    const hs = {}; QIDS.forEach((q) => { hs[q] = 0; });
+    return {
+      v: 1, group: g, seed: (seed >>> 0) || 1, linked: false, phase: "intro", step: 0,
+      done: {}, started: false,
+      failCount: 0, stepFails: 0, cooldownUntil: 0, locked: false,
+      hintSeen: hs, hintsUsed: 0, completed: false, animating: false, pending: null
+    };
+  }
+
+  const stepComplete = (s, i) => STEPS[i].qs.every((q) => s.done[q]) && (!STEPS[i].gate || s.started);
+  const firstOpenStep = (s) => { for (let i = 0; i < STEPS.length; i++) if (!stepComplete(s, i)) return i; return STEPS.length; };
+  function successInfo(s) {
+    const code = codeFor(s.group); const fill = (t) => String(t).split("{code}").join(code);
+    return { code, label: C.codeLabel, story: fill(C.story.success), next: fill(C.story.next), group: s.group };
+  }
+  const missingChecks = (s) => STEPS[GATE].qs.filter((q) => !s.done[q]);
+
+  /* ---------- 唯一的狀態轉換函式 ---------- */
+  function reduce(st, a, now) {
+    now = Number(now) || 0;
+    const s = clone(st);
+    const rej = (kind, extra) => ({ state: st, fb: Object.assign({ ok: false, kind }, extra || {}) });
+    const ok = (kind, extra) => ({ state: s, fb: Object.assign({ ok: true, kind }, extra || {}) });
+    const playGuard = () => {
+      if (s.phase === "done") return "completed";
+      if (s.phase !== "play") return "badPhase";
+      if (s.animating) return "busy";
+      if (s.locked) return "locked";
+      return null;
+    };
+
+    switch (a.type) {
+      case "link": {
+        if (s.phase !== "intro") return rej("badPhase");
+        if (!C.link.enabled) return rej("linkOff");
+        const idx = C.link.codes.indexOf(String(a.code == null ? "" : a.code).trim());
+        if (idx < 0) return rej("badCode");
+        s.group = idx + 1; s.linked = true; return ok("linked", { group: s.group });
+      }
+      case "start":
+        if (s.phase !== "intro") return rej("badPhase");
+        s.phase = "play"; s.step = 0; return ok("started");
+
+      case "answer": {
+        const g = playGuard(); if (g) return rej(g);
+        const q = Q[a.qid]; if (!q) return rej("badValue");
+        if (stepOfQ[a.qid] !== s.step) return rej("notThisStep");
+        if (s.done[a.qid]) return rej("already");
+        if (!optionIds(a.qid).includes(a.option)) return rej("badValue");
+        if (now < s.cooldownUntil) return rej("cooldown", { leftMs: s.cooldownUntil - now });
+        if (isCorrect(a.qid, a.option)) {
+          s.done[a.qid] = true; s.animating = true;
+          const advance = stepComplete(s, s.step);
+          s.pending = { advance };
+          return ok("correct", { qid: a.qid, anim: a.qid, learn: q.learn, advance, gateReady: !!STEPS[s.step].gate && STEPS[s.step].qs.every((x) => s.done[x]) && !s.started });
+        }
+        s.failCount++; s.stepFails++;
+        s.cooldownUntil = now + C.timing.cooldownMs;
+        if (s.stepFails >= C.timing.lockAfter) s.locked = true;
+        return ok("wrong", { qid: a.qid, text: whyOf(a.qid, a.option), failCount: s.failCount, stepFails: s.stepFails, lockedNow: s.locked });
+      }
+
+      case "startPrint": {
+        const g = playGuard(); if (g) return rej(g);
+        if (s.step !== GATE) return rej("notThisStep");
+        if (s.started) return rej("already");
+        const miss = missingChecks(s); if (miss.length) return rej("needChecks", { missing: miss });
+        s.started = true; s.animating = true; s.pending = { advance: true };
+        return ok("printStart", { anim: "startPrint", advance: true });
+      }
+
+      case "animEnd": {
+        s.animating = false;
+        const adv = s.pending && s.pending.advance; s.pending = null;
+        if (adv) {
+          s.stepFails = 0; s.step = firstOpenStep(s);
+          if (s.step >= STEPS.length) { s.phase = "done"; s.completed = true; s.step = STEPS.length - 1; }
+        }
+        return ok("animEnd", { advanced: !!adv });
+      }
+
+      case "replay":
+        if (s.phase !== "done") return rej("notDone");
+        if (s.animating) return rej("busy");
+        s.animating = true; s.pending = null; return ok("replay", { success: successInfo(s) });
+      case "showSuccess":
+        if (s.phase !== "done") return rej("notDone");
+        return ok("success", { success: successInfo(s) });
+      case "review": {
+        if (s.phase !== "done") return rej("notDone");
+        const q = C.review[a.q]; if (!q) return rej("badValue");
+        const o = q.options.find((x) => x.id === a.option); if (!o) return rej("badValue");
+        return ok("review", { correct: !!o.correct, text: o.why || "" });
+      }
+
+      /* 提示（每題由淺到深，依序解鎖；不直接公布答案） */
+      case "hint": {
+        if (s.phase !== "play") return rej("noHint");
+        const q = Q[a.qid]; if (!q || stepOfQ[a.qid] !== s.step || s.done[a.qid]) return rej("noHint");
+        const seen = s.hintSeen[a.qid];
+        let lv = a.level ? Math.floor(Number(a.level)) : seen + 1;
+        if (!Number.isFinite(lv)) lv = seen + 1;
+        lv = Math.max(1, Math.min(lv, seen + 1, 3));
+        s.hintSeen[a.qid] = Math.max(seen, lv); s.hintsUsed++;
+        return ok("hint", { level: lv, qid: a.qid, text: q.hints[lv - 1] });
+      }
+
+      /* 關主 */
+      case "unlock":
+        if (!checkPin(a.pin)) return rej("badPin");
+        s.locked = false; s.stepFails = 0; return ok("unlocked");
+      case "reset": {
+        if (!checkPin(a.pin)) return rej("badPin");
+        const next = initial(a.group != null ? a.group : s.group, a.seed != null ? a.seed : s.seed + 1);
+        return { state: next, fb: { ok: true, kind: "reset" } };
+      }
+    }
+    return rej("unknown");
+  }
+
+  /* ---------- 存檔／還原（嚴格驗證；被改壞或竄改就回到全新狀態）---------- */
+  function serialize(s) {
+    return JSON.stringify({
+      v: 1, group: s.group, seed: s.seed, linked: s.linked, phase: s.phase, done: s.done, started: s.started,
+      failCount: s.failCount, stepFails: s.stepFails, cooldownUntil: s.cooldownUntil, locked: s.locked,
+      hintSeen: s.hintSeen, hintsUsed: s.hintsUsed, completed: s.completed
+    });
+  }
+  function restore(json, now, seed) {
+    const fresh = () => initial(1, seed);
+    if (!json) return fresh();
+    try {
+      const o = JSON.parse(json);
+      if (!o || o.v !== 1) return fresh();
+      const isInt = (n, lo, hi) => Number.isInteger(n) && n >= lo && n <= hi;
+      if (!isInt(o.group, 1, C.groupCodes.length) || !isInt(o.seed, 1, 4294967295)) return fresh();
+      if (!["intro", "play", "done"].includes(o.phase)) return fresh();
+      if (typeof o.linked !== "boolean" || typeof o.started !== "boolean" || typeof o.locked !== "boolean" || typeof o.completed !== "boolean") return fresh();
+      if (!isInt(o.failCount, 0, 1e6) || !isInt(o.stepFails, 0, 1e6) || !isInt(o.hintsUsed, 0, 1e6)) return fresh();
+      if (!Number.isFinite(o.cooldownUntil) || o.cooldownUntil < 0) return fresh();
+      if (!o.done || typeof o.done !== "object" || Array.isArray(o.done)) return fresh();
+      if (!Object.keys(o.done).every((k) => QIDS.includes(k) && o.done[k] === true)) return fresh();
+      const hs = o.hintSeen; if (!hs || !QIDS.every((k) => isInt(hs[k], 0, 3))) return fresh();
+      const s = initial(o.group, o.seed);
+      s.linked = o.linked; s.done = clone(o.done); s.started = o.started;
+      /* 順序要說得通：後面的題有做，前面的步驟一定要完成 */
+      for (let i = 0; i < STEPS.length; i++) {
+        const any = STEPS[i].qs.some((q) => s.done[q]) || (STEPS[i].gate && s.started);
+        if (any) for (let j = 0; j < i; j++) if (!stepComplete(s, j)) return fresh();
+      }
+      if (s.started && !STEPS[GATE].qs.every((q) => s.done[q])) return fresh();
+      const open = firstOpenStep(s); const finished = open >= STEPS.length;
+      /* 全部做完的存檔，即使最後一個動畫還沒播完就重整，也算完成；但沒做完卻宣稱完成就是竄改 */
+      if ((o.completed || o.phase === "done") && !finished) return fresh();
+      if (o.completed !== (o.phase === "done")) return fresh();
+      if (o.phase === "intro" && (Object.keys(s.done).length || s.started)) return fresh();
+      s.phase = finished ? "done" : (Object.keys(s.done).length || s.started ? "play" : o.phase); s.completed = finished;
+      s.step = open >= STEPS.length ? STEPS.length - 1 : open;
+      s.failCount = o.failCount; s.stepFails = o.stepFails; s.locked = o.locked; s.hintSeen = clone(hs); s.hintsUsed = o.hintsUsed;
+      s.cooldownUntil = Math.min(o.cooldownUntil, (Number(now) || 0) + C.timing.cooldownMs);
+      s.animating = false; s.pending = null;
+      return s;
+    } catch (e) { return fresh(); }
+  }
+
+  /* localStorage 包 try/catch，失敗就退回記憶體變數 */
+  function makeStore(storage, key) {
+    let mem = null; let useMem = !storage;
+    return {
+      get() { if (!useMem) { try { return storage.getItem(key); } catch (e) { useMem = true; } } return mem; },
+      set(v) { if (!useMem) { try { storage.setItem(key, v); return; } catch (e) { useMem = true; } } mem = v; },
+      del() { mem = null; if (storage) { try { storage.removeItem(key); } catch (e) { /* 忽略 */ } } },
+      get usingMemory() { return useMem; }
+    };
+  }
+
+  return {
+    initial, reduce, serialize, restore, makeStore, esc, shuffle, hash,
+    optionsOf, reviewOptions, readings, isCorrect, whyOf, optionIds, cooldownLeft, checkPin, codeFor, successInfo,
+    stepComplete, firstOpenStep, missingChecks,
+    consts: { STEPS, QIDS, GATE, stepOfQ }
+  };
+})();
+
+</script>
+<script id="tests">
+/* =====================================================================
+   自動測試（對應「自動測試表」）。網址加 ?test=1 會在頁面上顯示通過／失敗
+   ===================================================================== */
+const Tests = (() => {
+  "use strict";
+  const C = CONFIG, L = Logic;
+  const { STEPS, QIDS, GATE } = L.consts;
+  const T0 = 1000000, CD = C.timing.cooldownMs;
+  const list = [];
+  const T = (name, fn) => list.push({ name, fn });
+  const eq = (a, b, m) => { const x = JSON.stringify(a), y = JSON.stringify(b); if (x !== y) throw new Error((m || "不相等") + "：得到 " + x + "，預期 " + y); };
+  const ok = (c, m) => { if (!c) throw new Error(m || "條件不成立"); };
+
+  const correctOf = (q) => (C.questions[q].kind === "choice" ? C.questions[q].options.find((o) => o.correct).id : C.questions[q].pick.correct);
+  const wrongOf = (q) => L.optionIds(q).filter((o) => o !== correctOf(q));
+  const qText = (q, opt) => L.whyOf(q, opt);
+
+  /* 小工具：依序套用動作（時間自己往前走） */
+  function drive(st, t) {
+    const o = { st, t, fb: null };
+    o.go = (a, dt) => { o.t += (dt == null ? CD + 50 : dt); const r = L.reduce(o.st, a, o.t); o.st = r.state; o.fb = r.fb; return r.fb; };
+    o.ok = (q) => o.go({ type: "answer", qid: q, option: correctOf(q) });
+    o.end = () => o.go({ type: "animEnd" }, 0);
+    return o;
+  }
+  /* 走到第 i 步開頭（前面的步驟都做完、動畫也播完） */
+  function toStep(i, group) {
+    const d = drive(L.initial(group || 1, 7), T0); d.go({ type: "start" });
+    for (let k = 0; k < i; k++) {
+      STEPS[k].qs.forEach((q) => { d.ok(q); if (!STEPS[k].gate) d.end(); else d.end(); });
+      if (STEPS[k].gate) { d.go({ type: "startPrint" }); d.end(); }
+    }
+    return d;
+  }
+  const allDone = () => toStep(STEPS.length - 1).ok && (() => { const d = toStep(STEPS.length - 1); d.ok("paint"); d.end(); return d; })();
+
+  /* ---------- T1 初始狀態 ---------- */
+  T("T1-1 初始：在說明畫面，什麼都還沒做", () => {
+    const s = L.initial(1, 5); eq(s.phase, "intro"); eq(s.step, 0); eq(s.done, {}); eq(s.started, false);
+    eq(s.failCount, 0); eq(s.locked, false); eq(s.completed, false); eq(s.animating, false);
+  });
+  T("T1-2 還沒開始就答題或開始列印，一律被拒絕", () => {
+    const s = L.initial(1, 5);
+    eq(L.reduce(s, { type: "answer", qid: "design", option: "a" }, T0).fb.kind, "badPhase");
+    eq(L.reduce(s, { type: "startPrint" }, T0).fb.kind, "badPhase");
+  });
+  T("T1-3 按開始後進入第 1 步", () => {
+    const r = L.reduce(L.initial(1, 5), { type: "start" }, T0); eq(r.state.phase, "play"); eq(r.state.step, 0);
+    eq(L.reduce(r.state, { type: "start" }, T0).fb.kind, "badPhase");
+  });
+
+  /* ---------- T2 每題只有一個正解 ---------- */
+  T("T2-1 每題只有一個正確選項（窮舉）", () => {
+    QIDS.forEach((q) => { const n = L.optionIds(q).filter((o) => L.isCorrect(q, o)).length; eq(n, 1, q + " 的正解數"); });
+  });
+  T("T2-2 檢核的「沒問題，放行」不是正解（這個情境有東西要處理）", () => {
+    ["filament", "plate"].forEach((q) => ok(!L.isCorrect(q, "release"), q + " 放行不該是正解"));
+  });
+  T("T2-3 只有答對那一個選項會前進，其餘都留在原地", () => {
+    QIDS.forEach((q) => {
+      const i = L.consts.stepOfQ[q];
+      L.optionIds(q).forEach((opt) => {
+        const d = toStep(i); const before = JSON.stringify(d.st.done);
+        const fb = d.go({ type: "answer", qid: q, option: opt });
+        if (opt === correctOf(q)) { eq(fb.kind, "correct"); ok(d.st.done[q], q + " 應完成"); }
+        else { eq(fb.kind, "wrong"); eq(JSON.stringify(d.st.done), before, q + " 答錯不該前進"); }
+      });
+    });
+  });
+
+  /* ---------- T3 答錯的回饋 ---------- */
+  T("T3-1 答錯一定有看得到的說明，不是空白", () => {
+    QIDS.forEach((q) => wrongOf(q).forEach((o) => ok(qText(q, o).length >= 8, q + "/" + o + " 缺說明")));
+  });
+  T("T3-2 答錯的說明不會直接說出正確答案", () => {
+    QIDS.forEach((q) => wrongOf(q).forEach((o) => C.questions[q].answerKeys.forEach((k) => ok(!qText(q, o).includes(k), q + "/" + o + " 洩漏了「" + k + "」"))));
+  });
+  T("T3-3 答錯的說明與提示都不會出現任何一組代碼", () => {
+    const texts = []; QIDS.forEach((q) => { wrongOf(q).forEach((o) => texts.push(qText(q, o))); C.questions[q].hints.forEach((h) => texts.push(h)); });
+    texts.forEach((t) => C.groupCodes.forEach((c) => ok(!t.includes(c), "出現代碼 " + c)));
+  });
+  T("T3-4 提示：三層由淺到深、依序解鎖、不超過三層，也不含答案關鍵字", () => {
+    QIDS.forEach((q) => {
+      const d = toStep(L.consts.stepOfQ[q]);
+      eq(d.go({ type: "hint", qid: q, level: 3 }).level, 1, "不能跳層");
+      eq(d.go({ type: "hint", qid: q }).level, 2); eq(d.go({ type: "hint", qid: q }).level, 3); eq(d.go({ type: "hint", qid: q }).level, 3, "最多三層");
+      C.questions[q].hints.forEach((h) => C.questions[q].answerKeys.forEach((k) => ok(!h.includes(k), q + " 提示洩漏「" + k + "」")));
+    });
+  });
+  T("T3-5 提示只能用在目前這一步、還沒答對的題目", () => {
+    const d = toStep(0); eq(d.go({ type: "hint", qid: "buy" }).kind, "noHint"); d.ok("design"); d.end(); eq(d.go({ type: "hint", qid: "design" }).kind, "noHint");
+  });
+  T("T3-6 每題答對後都有「為什麼」的知識說明", () => { QIDS.forEach((q) => ok(C.questions[q].learn.length >= 20, q + " 缺 learn")); });
+
+  /* ---------- T4 冷卻、鎖機 ---------- */
+  T("T4-1 答錯後有冷卻：冷卻內再答會被擋下，過了才能答", () => {
+    const d = toStep(0); d.go({ type: "answer", qid: "design", option: "b" }); const t = d.t;
+    const r = L.reduce(d.st, { type: "answer", qid: "design", option: "a" }, t + 1000); eq(r.fb.kind, "cooldown"); ok(r.fb.leftMs > 0 && r.fb.leftMs <= CD);
+    eq(L.reduce(d.st, { type: "answer", qid: "design", option: "a" }, t + CD).fb.kind, "correct");
+  });
+  T("T4-2 同一步答錯 5 次就鎖機，鎖了就不能再答", () => {
+    const d = toStep(0);
+    for (let i = 1; i < C.timing.lockAfter; i++) { d.go({ type: "answer", qid: "design", option: "b" }); eq(d.st.locked, false, "第 " + i + " 次不該鎖"); }
+    const fb = d.go({ type: "answer", qid: "design", option: "b" }); eq(fb.lockedNow, true); eq(d.st.locked, true);
+    eq(d.go({ type: "answer", qid: "design", option: "a" }).kind, "locked");
+  });
+  T("T4-3 鎖機要關主 PIN 才能解開；PIN 不對不行；解開後次數歸零", () => {
+    const d = toStep(0); for (let i = 0; i < C.timing.lockAfter; i++) d.go({ type: "answer", qid: "design", option: "b" });
+    eq(d.go({ type: "unlock", pin: "0000" }).kind, "badPin"); eq(d.st.locked, true);
+    eq(d.go({ type: "unlock", pin: C.masterPin }).kind, "unlocked"); eq(d.st.locked, false); eq(d.st.stepFails, 0);
+    eq(d.go({ type: "answer", qid: "design", option: "a" }).kind, "correct");
+  });
+  T("T4-4 答錯次數是「每一步」重算：前一步答錯的次數不會帶到下一步", () => {
+    const d = toStep(0); for (let i = 0; i < C.timing.lockAfter - 1; i++) d.go({ type: "answer", qid: "design", option: "b" });
+    d.ok("design"); d.end(); eq(d.st.stepFails, 0, "進入下一步應歸零"); eq(d.st.locked, false);
+    for (let i = 0; i < C.timing.lockAfter - 1; i++) d.go({ type: "answer", qid: "buy", option: "b" }); eq(d.st.locked, false);
+  });
+  T("T4-5 PIN 和鎖機次數是寫死的規格：2468、5 次", () => { eq(C.masterPin, "2468"); eq(C.timing.lockAfter, 5); eq(C.timing.cooldownMs, 3000); eq(C.timing.holdMs, 3000); });
+
+  /* ---------- T5 順序與動畫鎖定 ---------- */
+  T("T5-1 不能跳步：後面的題在前面的步驟完成前一律被拒絕", () => {
+    const d = toStep(0);
+    QIDS.filter((q) => L.consts.stepOfQ[q] > 0).forEach((q) => eq(d.go({ type: "answer", qid: q, option: correctOf(q) }).kind, "notThisStep", q));
+  });
+  T("T5-2 動畫播放中，所有答題與開始列印的按鈕都鎖定（不是中斷動畫）", () => {
+    const d = toStep(0); d.ok("design"); eq(d.st.animating, true);
+    eq(d.go({ type: "answer", qid: "buy", option: "a" }, 0).kind, "busy"); eq(d.go({ type: "answer", qid: "design", option: "a" }, 0).kind, "busy");
+    eq(d.go({ type: "startPrint" }, 0).kind, "busy"); eq(d.go({ type: "answer", qid: "design", option: "b" }, 0).kind, "busy");
+  });
+  T("T5-3 動畫播完才進到下一步；播完前還在原本那一步", () => {
+    const d = toStep(0); d.ok("design"); eq(d.st.step, 0); d.end(); eq(d.st.step, 1); eq(d.st.animating, false);
+  });
+  T("T5-4 已完成的題目不能再答", () => { const d = toStep(0); d.ok("design"); d.end(); eq(d.go({ type: "answer", qid: "design", option: "a" }).kind, "notThisStep"); });
+  T("T5-5 沒有的題目、沒有的選項，一律拒絕", () => {
+    const d = toStep(0); eq(d.go({ type: "answer", qid: "nope", option: "a" }).kind, "badValue"); eq(d.go({ type: "answer", qid: "design", option: "zzz" }).kind, "badValue");
+    eq(d.go({ type: "answer", qid: "design", option: "release" }).kind, "badValue", "選擇題沒有放行");
+  });
+
+  /* ---------- T6 列印前檢核 ---------- */
+  T("T6-1 檢核三項可以用任意順序完成", () => {
+    const orders = [["filament", "plate", "env"], ["env", "plate", "filament"], ["plate", "env", "filament"]];
+    orders.forEach((ord) => { const d = toStep(GATE); ord.forEach((q) => { eq(d.ok(q).kind, "correct"); d.end(); }); eq(L.missingChecks(d.st), []); });
+  });
+  T("T6-2 三項沒有都通過，就不能開始列印；缺哪幾項會告訴你", () => {
+    const d = toStep(GATE); let fb = d.go({ type: "startPrint" }); eq(fb.kind, "needChecks"); eq(fb.missing.length, 3);
+    d.ok("filament"); d.end(); d.ok("env"); d.end(); fb = d.go({ type: "startPrint" }); eq(fb.kind, "needChecks"); eq(fb.missing, ["plate"]);
+  });
+  T("T6-3 三項都通過：還在檢核這一步，要按「開始列印」才前進", () => {
+    const d = toStep(GATE); STEPS[GATE].qs.forEach((q) => { d.ok(q); d.end(); }); eq(d.st.step, GATE, "三項過了還沒開始列印"); eq(d.fb.advanced, false);
+    eq(d.go({ type: "startPrint" }).kind, "printStart"); eq(d.st.animating, true); d.end(); eq(d.st.step, GATE + 1);
+  });
+  T("T6-4 開始列印只能按一次，也不能在別的步驟按", () => {
+    const d = toStep(GATE); STEPS[GATE].qs.forEach((q) => { d.ok(q); d.end(); }); d.go({ type: "startPrint" }); d.end();
+    eq(d.go({ type: "startPrint" }).kind, "notThisStep"); eq(toStep(1).go({ type: "startPrint" }).kind, "notThisStep");
+  });
+  T("T6-5 放行有問題的項目＝答錯：被擋下並說明，檢核沒有通過", () => {
+    const d = toStep(GATE); ["filament", "plate"].forEach((q) => { const fb = d.go({ type: "answer", qid: q, option: "release" }); eq(fb.kind, "wrong"); ok(fb.text.length > 8); ok(!d.st.done[q]); });
+  });
+  T("T6-6 檢核的資料與答案不矛盾（數字真的有異常，所以不能放行）", () => {
+    ["filament", "plate", "env"].forEach((q) => eq(L.readings(q).filter((r) => r.abnormal).length >= 1, true, q + " 沒有任何異常讀數"));
+    ok(C.fila.remainG < C.fila.needG, "線材應該不夠用");
+    const v = Object.values(C.plate.gaps); ok(Math.max.apply(null, v) - Math.min.apply(null, v) <= C.plate.tol, "四角間隙已調平（差距在容許內）"); ok(C.plate.seated === false, "磁吸板應設為沒吸好，才是要處理的異常");
+    ok(C.env.bedNow < C.env.bedTarget, "平台應該升不到目標溫度");
+  });
+  T("T6-7 檢核每項只有一個異常讀數（學生要找得出來）", () => {
+    eq(L.readings("filament").filter((r) => r.abnormal).length, 1); eq(L.readings("plate").filter((r) => r.abnormal).length, 1);
+  });
+
+  /* ---------- T7 完整通關與完成後 ---------- */
+  T("T7-1 照順序全部答對 → 完成，拿到這一組的代碼", () => {
+    [1, 3, 10].forEach((g) => { const d = toStep(STEPS.length - 1, g); d.ok("paint"); eq(d.st.phase, "play"); d.end(); eq(d.st.phase, "done"); eq(d.st.completed, true); eq(L.successInfo(d.st).code, C.groupCodes[g - 1]); });
+  });
+  T("T7-2 動畫沒播完之前，不會顯示完成", () => { const d = toStep(STEPS.length - 1); d.ok("paint"); eq(d.st.completed, false); });
+  T("T7-3 完成後不能再答題或再開始列印，但可以重播動畫", () => {
+    const d = allDone(); eq(d.go({ type: "answer", qid: "paint", option: "a" }).kind, "completed"); eq(d.go({ type: "startPrint" }).kind, "completed");
+    eq(d.go({ type: "replay" }).kind, "replay"); eq(d.go({ type: "replay" }).kind, "busy"); d.end(); eq(d.st.completed, true);
+  });
+  T("T7-4 每組代碼都不一樣，而且都是 3 位數字", () => {
+    eq(new Set(C.groupCodes).size, C.groupCodes.length); C.groupCodes.forEach((c) => ok(/^\d{3}$/.test(c), c));
+  });
+  T("T7-5 回顧題只有完成後才能用，而且每題只有一個正解（選做，不影響過關）", () => {
+    eq(toStep(2).go({ type: "review", q: 0, option: "r1" }).kind, "notDone");
+    const d = allDone(); C.review.forEach((q, qi) => { eq(q.options.filter((o) => o.correct).length, 1); q.options.forEach((o) => eq(d.go({ type: "review", q: qi, option: o.id }).correct, !!o.correct)); });
+  });
+
+  /* ---------- T8 重新開始、關主 ---------- */
+  T("T8-1 重新開始：所有欄位真的歸零，只有組別和種子換新", () => {
+    const d = toStep(GATE); d.go({ type: "answer", qid: "env", option: "c" }); d.go({ type: "hint", qid: "env" });
+    const fb = d.go({ type: "reset", pin: C.masterPin, group: 4, seed: 99 }); eq(fb.kind, "reset");
+    eq(d.st, L.initial(4, 99));
+  });
+  T("T8-2 重新開始要 PIN；PIN 錯了什麼都不會變", () => { const d = toStep(2); const r = L.reduce(d.st, { type: "reset", pin: "1111" }, T0); eq(r.fb.kind, "badPin"); ok(r.state === d.st); });
+  T("T8-3 重新開始後，題目選項的順序會換（種子不同）", () => {
+    const a = L.optionsOf(L.initial(1, 11), "design").map((o) => o.id).join(), b = L.optionsOf(L.initial(1, 12), "design").map((o) => o.id).join();
+    const seen = new Set(); for (let sd = 1; sd < 40; sd++) seen.add(L.optionsOf(L.initial(1, sd), "design").map((o) => o.id).join()); ok(seen.size > 4, "順序變化太少"); void a; void b;
+  });
+
+  /* ---------- T9 存檔與還原 ---------- */
+  const same = (a, b) => { ["group", "seed", "linked", "phase", "step", "started", "completed", "failCount", "stepFails", "locked", "hintsUsed"].forEach((k) => eq(a[k], b[k], k)); eq(a.done, b.done); eq(a.hintSeen, b.hintSeen); };
+  T("T9-1 每一個進度點存檔後還原，內容都一樣", () => {
+    for (let i = 0; i < STEPS.length; i++) { const d = toStep(i, 3); d.go({ type: "answer", qid: STEPS[i].qs[0], option: wrongOf(STEPS[i].qs[0])[0] }); const r = L.restore(L.serialize(d.st), d.t, 5); same(r, d.st); }
+    const e = allDone(); same(L.restore(L.serialize(e.st), e.t, 5), e.st);
+  });
+  T("T9-2 存了檢核一半（兩項過）後還原，還是只差一項", () => {
+    const d = toStep(GATE); d.ok("env"); d.end(); d.ok("filament"); d.end(); const r = L.restore(L.serialize(d.st), d.t, 5); eq(L.missingChecks(r), ["plate"]); eq(r.step, GATE);
+  });
+  T("T9-3 剛答對、動畫還沒播完就重整：進度不會卡住，直接到下一步", () => {
+    const d = toStep(0); d.ok("design"); const r = L.restore(L.serialize(d.st), d.t, 5); eq(r.step, 1); eq(r.animating, false); eq(r.done.design, true);
+    const d2 = toStep(GATE); STEPS[GATE].qs.forEach((q) => { d2.ok(q); d2.end(); }); d2.go({ type: "startPrint" }); const r2 = L.restore(L.serialize(d2.st), d2.t, 5); eq(r2.step, GATE + 1);
+  });
+  T("T9-4 最後一題剛答對就重整：算完成（不會卡在最後一步）", () => { const d = toStep(STEPS.length - 1); d.ok("paint"); const r = L.restore(L.serialize(d.st), d.t, 5); eq(r.phase, "done"); eq(r.completed, true); });
+  T("T9-5 重整後冷卻與鎖機都保留，冷卻最多只剩一個冷卻時間", () => {
+    const d = toStep(0); for (let i = 0; i < C.timing.lockAfter; i++) d.go({ type: "answer", qid: "design", option: "b" });
+    const r = L.restore(L.serialize(d.st), d.t, 5); eq(r.locked, true); ok(r.cooldownUntil <= d.t + CD);
+    const hack = JSON.parse(L.serialize(d.st)); hack.cooldownUntil = d.t + 99999999; ok(L.restore(JSON.stringify(hack), d.t, 5).cooldownUntil <= d.t + CD, "被竄改的冷卻要截短");
+  });
+  T("T9-6 壞掉或被竄改的存檔：一律回到全新狀態，不會報錯", () => {
+    const d = toStep(GATE); const good = JSON.parse(L.serialize(d.st)); const fresh = L.initial(1, 5);
+    const mut = (f) => { const o = JSON.parse(JSON.stringify(good)); f(o); return JSON.stringify(o); };
+    const bads = [null, "", "{", "[]", "123", '{"v":2}', mut((o) => { o.group = 99; }), mut((o) => { o.seed = 0; }), mut((o) => { o.phase = "xx"; }),
+      mut((o) => { o.done.zzz = true; }), mut((o) => { o.done.design = "yes"; }), mut((o) => { delete o.done.design; }), mut((o) => { o.completed = true; }),
+      mut((o) => { o.phase = "done"; }), mut((o) => { o.started = true; }), mut((o) => { o.failCount = -1; }), mut((o) => { o.hintSeen.design = 9; }),
+      mut((o) => { delete o.hintSeen; }), mut((o) => { o.locked = "no"; }), mut((o) => { o.done = []; }), mut((o) => { o.cooldownUntil = "x"; }),
+      mut((o) => { o.phase = "intro"; })];
+    bads.forEach((b, i) => { const r = L.restore(b, d.t, 5); eq(r.phase, fresh.phase, "壞存檔 #" + i); eq(r.done, {}, "壞存檔 #" + i); });
+  });
+  T("T9-7 存檔可以跳過步驟的竄改會被抓到（直接宣稱做完後面的題）", () => {
+    const o = JSON.parse(L.serialize(toStep(0).st)); o.phase = "play"; o.done = { paint: true }; eq(L.restore(JSON.stringify(o), T0, 5).done, {});
+  });
+  T("T9-8 localStorage 壞掉時改用記憶體，不會當機", () => {
+    const bad = { getItem() { throw new Error("x"); }, setItem() { throw new Error("x"); }, removeItem() { throw new Error("x"); } };
+    const st = L.makeStore(bad, "k"); st.set("abc"); eq(st.get(), "abc"); st.del(); eq(st.get(), null); eq(st.usingMemory, true);
+    const none = L.makeStore(null, "k"); none.set("q"); eq(none.get(), "q");
+  });
+
+  /* ---------- T10 第一站代碼（銜接） ---------- */
+  T("T10-1 輸入第一站的代碼：確認完成並帶入組別", () => {
+    C.link.codes.forEach((code, i) => { const r = L.reduce(L.initial(1, 5), { type: "link", code }, T0); eq(r.fb.kind, "linked"); eq(r.state.group, i + 1); eq(r.state.linked, true); });
+  });
+  T("T10-2 代碼不對就拒絕，狀態不變；開始之後也不能再輸入", () => {
+    const s = L.initial(1, 5); ["", "000", "45", "4500", "abc", null, undefined].forEach((c) => { const r = L.reduce(s, { type: "link", code: c }, T0); eq(r.fb.kind, "badCode"); ok(r.state === s); });
+    const p = L.reduce(s, { type: "start" }, T0).state; eq(L.reduce(p, { type: "link", code: "405" }, T0).fb.kind, "badPhase");
+  });
+  T("T10-3 不輸入也能玩（銜接是選用，不影響判定）", () => { const d = toStep(0); eq(d.st.linked, false); eq(d.ok("design").kind, "correct"); });
+  T("T10-4 第一站的代碼會被前後空白包住也能辨識", () => { eq(L.reduce(L.initial(1, 5), { type: "link", code: " 405 " }, T0).fb.kind, "linked"); });
+
+  /* ---------- T11 隨機、跳脫、純函式 ---------- */
+  T("T11-1 選項順序：同一個種子永遠一樣、每個選項都在、正解位置會變", () => {
+    QIDS.forEach((q) => {
+      const a = L.optionsOf(L.initial(1, 5), q), b = L.optionsOf(L.initial(1, 5), q); eq(a, b);
+      eq(a.map((o) => o.id).sort(), L.optionIds(q).slice().sort());
+      const pos = new Set(); for (let s = 1; s <= 60; s++) pos.add(L.optionsOf(L.initial(1, s), q).findIndex((o) => o.id === correctOf(q))); ok(pos.size >= 3, q + " 正解位置太固定");
+    });
+  });
+  T("T11-2 選項順序重整後不變（種子有存）", () => { const d = toStep(0); const r = L.restore(L.serialize(d.st), d.t, 777); eq(L.optionsOf(r, "design"), L.optionsOf(d.st, "design")); });
+  T("T11-3 玩家看得到的文字插進畫面前會跳脫（防 HTML 注入）", () => {
+    eq(L.esc('<img src=x onerror="a()">'), "&lt;img src=x onerror=&quot;a()&quot;&gt;"); eq(L.esc("a&b'c`d"), "a&amp;b&#39;c&#96;d");
+  });
+  T("T11-4 reduce 是純函式：不改傳入的狀態；被拒絕時回傳同一個物件", () => {
+    const d = toStep(1); const snap = JSON.stringify(d.st); L.reduce(d.st, { type: "answer", qid: "buy", option: "b" }, d.t + CD); eq(JSON.stringify(d.st), snap);
+    const r = L.reduce(d.st, { type: "answer", qid: "slice", option: "a" }, d.t + CD); ok(r.state === d.st); eq(L.reduce(d.st, { type: "???" }, T0).fb.kind, "unknown");
+  });
+
+  /* ---------- T12 CONFIG 與動畫表 ---------- */
+  T("T12-1 CONFIG：步驟與題目對得上、選項 id 不重複、題目文字不是空的", () => {
+    const seen = []; STEPS.forEach((s) => s.qs.forEach((q) => { ok(C.questions[q], "缺題目 " + q); seen.push(q); })); eq(seen.sort(), Object.keys(C.questions).sort());
+    eq(STEPS.filter((s) => s.gate).length, 1); eq(STEPS.length, 7);
+    QIDS.forEach((q) => { const ids = L.optionIds(q); eq(new Set(ids).size, ids.length, q + " 選項 id 重複"); ok(C.questions[q].prompt.length > 10); eq(C.questions[q].hints.length, 3); });
+    QIDS.forEach((q) => { const c = C.questions[q]; if (c.kind === "choice") eq(c.options.length, 4); else { ok(c.pick.objs.every((o) => C.objects[o]), q + " 物件不存在"); ok(c.pick.objs.includes(c.pick.correct)); c.pick.objs.filter((o) => o !== c.pick.correct).forEach((o) => ok(c.pick.why[o], q + "/" + o + " 缺說明")); ok(c.pick.why.release); } });
+  });
+  T("T12-2 CONFIG：數字合理（秒數、次數、PIN、代碼）", () => {
+    ok(C.timing.cooldownMs >= 1000 && C.timing.animMs >= 1000 && C.timing.lockAfter >= 3 && C.timing.holdMs >= 1000); ok(/^\d{4}$/.test(C.masterPin));
+    eq(C.link.codes.length, C.groupCodes.length);
+  });
+  T("T12-3 動畫表：每個會播的動畫都有，數值都在 0～1，只改場景裡有的量", () => {
+    const keys = QIDS.concat(["startPrint"]); keys.forEach((k) => ok(Anim.PATCH[k], "缺動畫 " + k)); eq(Anim.ORDER.slice().sort(), keys.slice().sort());
+    keys.forEach((k) => [0, 0.25, 0.5, 0.75, 1].forEach((t) => { const p = Anim.PATCH[k](t); Object.keys(p).forEach((n) => { ok(n in Anim.DEFAULT, k + " 動到沒有的量 " + n); ok(p[n] >= 0 && p[n] <= 1 && Number.isFinite(p[n]), k + "." + n + "@" + t + " = " + p[n]); }); }));
+  });
+  T("T12-4 動畫表：第一格不會跳（t=0 和上一步結束時一致）", () => {
+    const hold = (k) => Object.keys(Anim.PATCH[k](0)); // 動畫開始時，只有「從無到有」的量會是 0
+    Anim.ORDER.forEach((k) => { const s0 = Anim.stateFor({}, false, k, 0); Object.keys(Anim.PATCH[k](0)).forEach((n) => ok(Number.isFinite(s0[n]))); void hold; });
+    const a = Anim.stateFor({ design: true }, false, "design", 1), b = Anim.stateFor({ design: true }, false, null, 1); eq(a, b, "播完的畫面要等於完成後的畫面");
+  });
+  T("T12-5 動畫表：由存檔還原場景，和一步步播完的結果相同", () => {
+    const d = allDone(); const st = Anim.stateFor(d.st.done, d.st.started, null, 1); eq(st.print, 1); eq(st.paint, 1); eq(st.gloss, 1); eq(st.warp, 0); eq(st.level, 1); eq(st.spoolSwap, 1); eq(st.warm, 1);
+    const mid = toStep(GATE); mid.ok("plate"); mid.end(); const sm = Anim.stateFor(mid.st.done, mid.st.started, null, 1); eq(sm.level, 1); eq(sm.spoolSwap, 0); eq(sm.warm, 0);
+  });
+  T("T12-6 動畫表：列印中的翹邊要在「開始列印」後出現、巡檢後消失", () => {
+    const afterStart = Anim.stateFor({ design: 1, buy: 1, slice: 1, filament: 1, plate: 1, env: 1 }, true, null, 1); eq(afterStart.warp, 1); ok(afterStart.print > 0 && afterStart.print < 0.3);
+    const afterWatch = Anim.stateFor({ design: 1, buy: 1, slice: 1, filament: 1, plate: 1, env: 1, watch: 1 }, true, null, 1); eq(afterWatch.warp, 0); eq(afterWatch.print, 1);
+  });
+
+  /* ---------- 執行與顯示 ---------- */
+  function run() {
+    return list.map((t) => { try { t.fn(); return { name: t.name, pass: true }; } catch (e) { return { name: t.name, pass: false, err: String((e && e.message) || e) }; } });
+  }
+  function render(root) {
+    const res = run(); const bad = res.filter((r) => !r.pass).length;
+    const box = document.createElement("details"); box.open = true; box.className = "testpanel";
+    const sum = document.createElement("summary"); sum.textContent = "自動測試：" + (res.length - bad) + " / " + res.length + " 通過" + (bad ? "（有 " + bad + " 項失敗）" : " ✔"); sum.className = bad ? "bad" : "good";
+    box.appendChild(sum);
+    const ul = document.createElement("ul");
+    res.forEach((r) => { const li = document.createElement("li"); li.className = r.pass ? "good" : "bad"; li.textContent = (r.pass ? "通過 ✔　" : "失敗 ✘　") + r.name + (r.err ? " → " + r.err : ""); ul.appendChild(li); });
+    box.appendChild(ul); root.prepend(box); return res;
+  }
+  return { list, run, render };
+})();
+
+</script>
+<script id="stage">
+/* =====================================================================
+   3D 場景（CSS 3D，不用外部資源）：把 Anim 算出的狀態畫出來，並處理拖曳旋轉與點選物件
+   座標：x 向右、y 向上、z 朝向觀眾；單位是邏輯像素
+   ===================================================================== */
+const Stage = (() => {
+  "use strict";
+  const W = 560, H = 420;
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const sm = (t) => t * t * (3 - 2 * t);
+  const seg = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
+  const hex = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const mixHex = (a, b, k) => { const A = hex(a), B = hex(b); return "rgb(" + [0, 1, 2].map((i) => Math.round(lerp(A[i], B[i], k))).join(",") + ")"; };
+  const RM = () => !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+  /* ---------- 積木：長方體（原點在底面中心）---------- */
+  function cuboid(parent, w, h, d, o) {
+    o = o || {};
+    const el = document.createElement("div"); el.className = "cb" + (o.cls ? " " + o.cls : "");
+    if (o.color) el.style.setProperty("--c", o.color);
+    if (o.obj) { el.dataset.obj = o.obj; el.classList.add("obj"); }
+    const faces = [
+      ["front", w, h, -w / 2, -h, "translateZ(" + d / 2 + "px)"],
+      ["back", w, h, -w / 2, -h, "rotateY(180deg) translateZ(" + d / 2 + "px)"],
+      ["right", d, h, -d / 2, -h, "rotateY(90deg) translateZ(" + w / 2 + "px)"],
+      ["left", d, h, -d / 2, -h, "rotateY(-90deg) translateZ(" + w / 2 + "px)"],
+      ["top", w, d, -w / 2, -h - d / 2, "rotateX(90deg)"],
+      ["bottom", w, d, -w / 2, -d / 2, "rotateX(-90deg)"]
+    ];
+    const fe = {};
+    faces.forEach((f) => {
+      const x = document.createElement("div"); x.className = "f " + f[0];
+      x.style.width = f[1] + "px"; x.style.height = f[2] + "px"; x.style.left = f[3] + "px"; x.style.top = f[4] + "px"; x.style.transform = f[5];
+      if (o.html && o.html[f[0]]) x.innerHTML = o.html[f[0]];
+      el.appendChild(x); fe[f[0]] = x;
+    });
+    if (parent) parent.appendChild(el);
+    return { el, faces: fe, w, h, d };
+  }
+  /* 單層水平薄片（只有一個面，畫起來比整塊輕） */
+  function plane(parent, w, d, cls, color) {
+    const el = document.createElement("div"); el.className = "cb pl" + (cls ? " " + cls : ""); if (color) el.style.setProperty("--c", color);
+    const f = document.createElement("div"); f.className = "f pf"; f.style.width = w + "px"; f.style.height = d + "px"; f.style.left = -w / 2 + "px"; f.style.top = -d / 2 + "px"; f.style.transform = "rotateX(90deg)";
+    el.appendChild(f); if (parent) parent.appendChild(el); return { el, faces: { top: f }, w, h: 0, d };
+  }
+  const group = (parent, cls) => { const el = document.createElement("div"); el.className = "grp" + (cls ? " " + cls : ""); if (parent) parent.appendChild(el); return el; };
+  const put = (n, x, y, z, extra) => { n.style.transform = "translate3d(" + x.toFixed(2) + "px," + (-y).toFixed(2) + "px," + z.toFixed(2) + "px)" + (extra || ""); };
+  const vis = (n, v) => { const d = v ? "" : "none"; if (n.style.display !== d) n.style.display = d; };
+
+  /* ---------- 公仔的零件表（y 為底、h 為高）---------- */
+  const FIG = [
+    { id: "footL", x: -10, z: 3, w: 15, h: 8, d: 20, y: 0, col: "shoe", pg: 0 },
+    { id: "footR", x: 10, z: 3, w: 15, h: 8, d: 20, y: 0, col: "shoe", pg: 0 },
+    { id: "legL", x: -10, z: 0, w: 11, h: 18, d: 12, y: 8, col: "pants", pg: 0 },
+    { id: "legR", x: 10, z: 0, w: 11, h: 18, d: 12, y: 8, col: "pants", pg: 0 },
+    { id: "body", x: 0, z: 0, w: 40, h: 30, d: 26, y: 26, col: "shirt", pg: 1 },
+    { id: "armL", x: -27, z: 0, w: 10, h: 26, d: 12, y: 28, col: "shirt", pg: 1 },
+    { id: "armR", x: 27, z: 0, w: 10, h: 26, d: 12, y: 28, col: "shirt", pg: 1 },
+    { id: "head", x: 0, z: 0, w: 36, h: 28, d: 32, y: 56, col: "skin", pg: 2 },
+    { id: "cap", x: 0, z: 0, w: 38, h: 8, d: 34, y: 84, col: "cap", pg: 3 },
+    { id: "brim", x: 0, z: 2, w: 52, h: 3, d: 50, y: 82, col: "cap", pg: 3 }
+  ];
+  const SUPP = [[-27, -4], [-27, 4], [27, -4], [27, 4]].map((p, i) => ({ id: "s" + i, x: p[0], z: p[1], w: 3.5, h: 28, d: 3.5, y: 54 }));
+  const FH = 92;                         // 公仔總高
+  const PAL = { raw: "#d9dee9", sanded: "#eef1f7", primer: "#a9b2c6", shoe: "#243a6e", pants: "#2f56a8", shirt: "#3b82f6", skin: "#ffd3a3", cap: "#ff8a1f" };
+  const PAINT_AT = [[0.28, 0.42], [0.42, 0.58], [0.58, 0.74], [0.74, 0.88]];
+  const BED_Y = 46;                      // 平台表面高度
+  const REST = { x: -78, y: 0, z: 108 }; // 取下後成品放在桌上的位置
+
+  function create(root) {
+    root.classList.add("stage3d");
+    root.innerHTML = "";
+    const vp = group(root, "vp"), cam = group(vp, "cam"), world = group(cam, "world");
+    const R = { root, vp, cam, world };
+
+    /* 桌面與牆 */
+    cuboid(world, 470, 18, 330, { cls: "table", color: "#6b4f3a" }).el.style.transform = "translate3d(0px,18px,0px)";
+    const wall = cuboid(world, 480, 250, 6, { cls: "wall", color: "#16305a" }); put(wall.el, 0, 0, -150);
+    const win = cuboid(world, 120, 92, 3, { cls: "win", color: "#a9d9ff" }); put(win.el, 140, 76, -146);
+    const thermo = cuboid(world, 34, 96, 3, { cls: "thermo", color: "#e8eefb", html: { front: '<div class="th"><i></i><b>' + CONFIG.env.room + '℃</b></div>' } }); put(thermo.el, -150, 74, -146);
+
+    /* 印表機 */
+    const printer = group(world, "printer"); R.printer = printer;
+    cuboid(printer, 250, 40, 210, { cls: "pbase", color: "#2c5aa0" });
+    const screen = cuboid(printer, 74, 46, 6, { cls: "screen", color: "#10233f", obj: "screen", html: { front: '<div class="scr"><b data-k="n">噴頭 25℃</b><b data-k="b">平台 38℃</b><i>PLA</i></div>' } });
+    put(screen.el, 78, 0, 118, " rotateX(-18deg)"); R.scr = screen.faces.front;
+    [-112, 112].forEach((x) => { const p = cuboid(printer, 12, 150, 14, { cls: "pillar", color: "#3b6fb6" }); put(p.el, x, 40, 0); });
+    R.bedG = group(printer, "bedg");
+    R.bed = cuboid(R.bedG, 176, 6, 156, { cls: "bed", color: "#4a5b7a", obj: "bed" }); put(R.bed.el, 0, 40, 0);
+    R.knobs = [[-70, 62], [70, 62], [-70, -62], [70, -62]].map((p) => { const k = cuboid(R.bedG, 14, 8, 14, { cls: "knob", color: "#ffb347", obj: "knob" }); put(k.el, p[0], 34, p[1]); return k; });
+    R.bar = cuboid(printer, 236, 12, 12, { cls: "bar", color: "#4a82d0" });
+    R.car = cuboid(printer, 38, 26, 26, { cls: "car", color: "#5b93e0", obj: "nozzle" });
+    R.fan = cuboid(printer, 16, 16, 16, { cls: "fan", color: "#e8eefb", obj: "fan" });
+    R.tip = cuboid(printer, 9, 9, 9, { cls: "tip", color: "#ff8a1f", obj: "nozzle" });
+
+    /* 線材卷架與線材 */
+    const post = cuboid(world, 8, 100, 8, { cls: "post", color: "#3b6fb6" }); put(post.el, 150, 0, -40);
+    const axle = cuboid(world, 6, 6, 52, { cls: "axle", color: "#8aa4d0" }); put(axle.el, 150, 98, -40);
+    R.holder = { x: 150, y: 101, z: -40 };
+    function spool(radius, fill, col) {
+      const g = group(world, "spool"); g.dataset.obj = "spool"; g.classList.add("obj");
+      const mk = (r, z, c, cls) => { const d = document.createElement("div"); d.className = "disc " + (cls || ""); d.style.width = d.style.height = r * 2 + "px"; d.style.left = d.style.top = -r + "px"; d.style.transform = "translateZ(" + z + "px)"; d.style.background = c; g.appendChild(d); return d; };
+      for (let z = -9; z <= 9; z += 3) mk(fill, z, col, "wire");
+      mk(radius, -12, "#cfd8ea", "flange"); mk(radius, 12, "#cfd8ea", "flange"); mk(12, 14, "#8aa4d0", "hub");
+      const mark = document.createElement("div"); mark.className = "mark"; mark.style.transform = "translateZ(13px) translateY(" + -(radius - 8) + "px)"; g.appendChild(mark);
+      return g;
+    }
+    R.spoolOld = spool(34, 17, "#27c3a8");
+    R.spoolNew = spool(34, 30, "#27c3a8");
+    R.line = document.createElement("div"); R.line.className = "fline"; world.appendChild(R.line);
+
+    /* 包裹（桌面左前方） */
+    R.pkg = group(world, "pkg");
+    cuboid(R.pkg, 76, 46, 58, { cls: "box", color: "#c99a62" });
+    R.lidG = group(R.pkg, "lidg"); const lid = cuboid(R.lidG, 76, 3, 58, { cls: "box", color: "#d8aa72" }); lid.el.style.transform = "translate3d(0px,0px,29px)"; R.lid = lid;
+    R.PK = { x: -150, y: 0, z: 84 };
+
+    /* 公仔：數位模型（藍色透明）、切片預覽、實體 */
+    R.holo = group(world, "holo"); R.hp = FIG.map((p) => { const c = cuboid(R.holo, p.w, p.h, p.d, { cls: "holo" }); put(c.el, p.x, p.y, p.z); return c; });
+    R.holes = [[-14, 70, 17], [20, 40, 14], [8, 92, 12]].map((p) => { const c = cuboid(R.holo, 5, 5, 3, { cls: "holebad", color: "#ff4d5e" }); put(c.el, p[0], p[1], p[2]); return c; });
+    R.scanL = plane(R.holo, 64, 54, "scan", "#7fe3ff");
+    R.plan = group(world, "plan");
+    R.layers = []; for (let i = 0; i < 10; i++) { const c = plane(R.plan, 56, 52, "slice", "#5aa9ff"); put(c.el, 0, 6 + i * 9.2, 2); R.layers.push(c); }
+    R.planBrim = cuboid(R.plan, 70, 1.6, 58, { cls: "slice brimghost", color: "#ffd24d" });
+    R.planSupp = SUPP.map((p) => { const c = cuboid(R.plan, p.w, p.h, p.d, { cls: "slice supp", color: "#ffd24d" }); put(c.el, p.x, p.y, p.z); return c; });
+    R.fig = group(world, "fig");
+    R.figB = group(R.fig, "figb");
+    R.parts = FIG.map((p) => { const c = cuboid(R.figB, p.w, p.h, p.d, { cls: "part" + (p.id === "head" ? " head" : ""), color: PAL.raw, html: p.id === "head" ? { front: '<i class="eye l"></i><i class="eye r"></i><i class="mouth"></i>' } : null }); put(c.el, p.x, p.y, p.z); return c; });
+    R.supps = SUPP.map((p) => { const c = cuboid(R.figB, p.w, p.h, p.d, { cls: "part sup", color: "#f0c040" }); put(c.el, p.x, p.y, p.z); return c; });
+    R.brim0 = cuboid(R.figB, 66, 1.8, 54, { cls: "part brimplate", color: "#e9edf5" });
+    R.brim1 = cuboid(R.figB, 84, 1.8, 70, { cls: "part brimplate", color: "#e9edf5" });
+    R.warnL = document.createElement("div"); R.warnL.className = "warn3d"; R.warnL.textContent = "⚠ 右前角翹起"; R.fig.appendChild(R.warnL);
+    R.turn = cuboid(world, 52, 3, 52, { cls: "turn", color: "#314b78" }); put(R.turn.el, REST.x, 0, REST.z);
+
+    /* 工具 */
+    R.cutter = group(world, "tool"); cuboid(R.cutter, 22, 3, 3, { cls: "tl", color: "#e24a4a" }).el.style.transform = "rotateZ(-14deg)"; cuboid(R.cutter, 22, 3, 3, { cls: "tl", color: "#e24a4a" }).el.style.transform = "rotateZ(14deg)";
+    R.sand = cuboid(world, 28, 6, 20, { cls: "tool sandp", color: "#b8864b" });
+    R.spray = cuboid(world, 12, 30, 12, { cls: "tool spr", color: "#e8eefb" });
+    R.mist = group(world, "mist");
+    R.heater = cuboid(world, 30, 34, 20, { cls: "heater", color: "#7a2a2a" }); put(R.heater.el, -150, 0, -50);
+    R.shield = cuboid(world, 7, 120, 96, { cls: "shield", color: "#d7ecff" });
+    R.winds = []; for (let i = 0; i < 5; i++) { const c = cuboid(world, 16, 1.6, 1.6, { cls: "wind", color: "#bfe6ff" }); R.winds.push(c); }
+
+    R.cs = { ry: -30, rx: -20, z: 1, f: [0, 70, 0] };        // 目前鏡頭
+    R.target = null; R.raf = 0; R.onPick = null; R.last = null; R.tmp = {};
+    bindInput(R);
+    new ResizeObserver(() => size(R)).observe(root); size(R);
+    applyCam(R);
+    return R;
+  }
+
+  function size(R) { const w = R.root.clientWidth || W; R.root.style.setProperty("--u", (w / W).toFixed(4)); }
+
+  /* ---------- 鏡頭 ---------- */
+  function applyCam(R) {
+    const c = R.cs;
+    R.cam.style.transform = "scale(" + c.z.toFixed(3) + ") rotateX(" + c.rx.toFixed(2) + "deg) rotateY(" + c.ry.toFixed(2) + "deg)";
+    R.world.style.transform = "translate3d(" + (-c.f[0]).toFixed(1) + "px," + (c.f[1]).toFixed(1) + "px," + (-c.f[2]).toFixed(1) + "px)";
+  }
+  function focus(R, preset, instant) {
+    const p = typeof preset === "string" ? Anim.CAM[preset] : preset; if (!p) return;
+    R.target = { ry: p.ry, rx: p.rx, z: p.z, f: p.f.slice() };
+    if (instant || RM()) { R.cs = { ry: p.ry, rx: p.rx, z: p.z, f: p.f.slice() }; R.target = null; applyCam(R); return; }
+    if (R.raf) return;
+    let t0 = performance.now(); const from = { ry: R.cs.ry, rx: R.cs.rx, z: R.cs.z, f: R.cs.f.slice() };
+    const step = (now) => {
+      const k = sm(clamp((now - t0) / 800, 0, 1)); const T = R.target; if (!T) { R.raf = 0; return; }
+      R.cs = { ry: lerp(from.ry, T.ry, k), rx: lerp(from.rx, T.rx, k), z: lerp(from.z, T.z, k), f: [0, 1, 2].map((i) => lerp(from.f[i], T.f[i], k)) };
+      applyCam(R); if (k < 1) R.raf = requestAnimationFrame(step); else { R.raf = 0; R.target = null; }
+    };
+    R.raf = requestAnimationFrame(step);
+  }
+  function bindInput(R) {
+    const st = { down: false, moved: false, x: 0, y: 0, tgt: null };
+    R.root.style.touchAction = "none";
+    R.root.addEventListener("contextmenu", (e) => e.preventDefault());
+    R.root.addEventListener("pointerdown", (e) => { st.down = true; st.moved = false; st.x = e.clientX; st.y = e.clientY; st.tgt = e.target; R.target = null; if (R.raf) { cancelAnimationFrame(R.raf); R.raf = 0; } });
+    R.root.addEventListener("pointermove", (e) => {
+      if (!st.down) return; const dx = e.clientX - st.x, dy = e.clientY - st.y;
+      if (!st.moved && Math.hypot(dx, dy) < 7) return;
+      if (!st.moved) { st.moved = true; try { R.root.setPointerCapture(e.pointerId); } catch (x) { /* 忽略 */ } }
+      R.cs.ry += dx * 0.45; R.cs.rx = clamp(R.cs.rx + dy * 0.3, -70, -4); st.x = e.clientX; st.y = e.clientY; applyCam(R);
+    });
+    const up = () => {
+      if (!st.down) return; st.down = false;
+      if (!st.moved && st.tgt && st.tgt.closest) { const o = st.tgt.closest("[data-obj]"); if (o && R.onPick) R.onPick(o.dataset.obj); }
+    };
+    R.root.addEventListener("pointerup", up); R.root.addEventListener("pointercancel", () => { st.down = false; });
+  }
+  function zoom(R, k) { R.cs.z = clamp(R.cs.z * k, 0.7, 3.2); applyCam(R); }
+
+  /* ---------- 畫面：由狀態畫出每個零件 ---------- */
+  function render(R, S, o) {
+    o = o || {}; const clk = o.clk || 0, printing = !!o.printing;
+    const E = CONFIG.env, p = S.print, lvl = S.level;
+    const warm = S.warm;
+    /* 平台傾斜（不平）與溫度 */
+    const tilt = (1 - lvl) * 3.2;
+    R.bedG.style.transform = "translate3d(0px,0px," + (printing ? Math.sin(clk * 6) * 7 : 0).toFixed(2) + "px) rotateX(" + (-tilt).toFixed(2) + "deg) rotateZ(" + (tilt * 0.7).toFixed(2) + "deg)";
+    const bedT = p >= 1 && S.lift >= 0 ? 30 + 30 * S.bedHeat : (warm >= 1 ? 38 + 22 * S.bedHeat : E.bedNow);
+    const heat = clamp((bedT - E.room) / (E.bedTarget - E.room), 0, 1);
+    R.bed.el.style.setProperty("--c", mixHex("#4a5b7a", "#ff8a1f", heat * 0.85));
+    const nozT = p >= 1 ? 25 + 175 * S.bedHeat : 25 + 175 * seg(S.feed, 0, 0.5);
+    const kn = "n", kb = "b";
+    const tn = "噴頭 " + Math.round(nozT) + "℃", tb = "平台 " + Math.round(bedT) + "℃";
+    const sn = R.scr.querySelector('[data-k="' + kn + '"]'), sb = R.scr.querySelector('[data-k="' + kb + '"]');
+    if (sn.textContent !== tn) sn.textContent = tn; if (sb.textContent !== tb) { sb.textContent = tb; sb.classList.toggle("lowtemp", bedT < E.bedTarget - 1 && warm < 1 && S.bedHeat < 1); }
+
+    /* 噴頭、橫樑、風扇 */
+    const top = BED_Y + p * FH;
+    let nx = -88, ny = 150; // 停靠位置
+    if (p > 0 && p < 1) { nx = printing ? Math.sin(clk * 9) * 14 : 0; ny = top + 8; if (S.park > 0) { nx = lerp(nx, -88, S.park); ny = lerp(ny, ny + 36, S.park); } }
+    put(R.car.el, nx, ny, 0, ""); put(R.tip.el, nx, ny - 8, 0); put(R.fan.el, nx + 24, ny - 2, 14);
+    put(R.bar.el, 0, ny + 2, 0);
+    R.tip.el.style.setProperty("--c", nozT > 120 ? "#ff6a1a" : "#8e9bb3");
+
+    /* 線材卷：舊的、新的、線材 */
+    const H0 = R.holder, PK = R.PK;
+    const sw = sm(S.spoolSwap), spin = printing ? clk * 2.4 : 0;
+    vis(R.spoolOld, S.spoolSwap < 0.5);
+    put(R.spoolOld, H0.x, H0.y + sw * 70, H0.z, " scale(" + (1 - sw).toFixed(3) + ") rotateZ(" + (-spin * 50).toFixed(1) + "deg)");
+    const newVisible = S.pkgOpen > 0.2;
+    vis(R.spoolNew, newVisible);
+    const rise = 0, arc = Math.sin(Math.PI * sw) * 46;
+    const sx = lerp(PK.x, H0.x, sw), sy = lerp(PK.y + 40 + sm(seg(S.pkgOpen, 0.2, 1)) * 24, H0.y, sw) + arc, sz = lerp(PK.z, H0.z, sw);
+    put(R.spoolNew, sx, sy + rise, sz, " rotateY(" + lerp(60, 0, sw).toFixed(1) + "deg) rotateZ(" + (-spin * 50).toFixed(1) + "deg)");
+    const feeding = S.spoolSwap < 0.15 || S.feed > 0.5;
+    vis(R.line, feeding);
+    if (feeding) {
+      const R0 = S.spoolSwap < 0.5 ? 17 : 30; const a = [H0.x, H0.y + R0 + 2, H0.z]; const b = [nx, ny + 14, 0];
+      const k = S.spoolSwap < 0.5 ? 1 : seg(S.feed, 0.5, 1); const e = [lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k)];
+      line(R.line, a, e);
+    }
+
+    /* 包裹 */
+    const pk = sm(S.pkg); vis(R.pkg, S.pkg > 0);
+    put(R.pkg, lerp(-260, PK.x, pk), 0, PK.z, ""); R.lidG.style.transform = "translate3d(0px," + (-46) + "px," + (-29) + "px) rotateX(" + (sm(S.pkgOpen) * 112).toFixed(1) + "deg)";
+    vis(R.lidG, true);
+
+    /* 環境：風、擋風板、暖爐 */
+    R.heater.el.style.setProperty("--c", mixHex("#4a2a2a", "#ff6a1a", warm)); R.heater.el.classList.toggle("glow", warm > 0.2);
+    put(R.shield.el, 170, lerp(150, 0, sm(seg(warm, 0, 0.7))), -10); vis(R.shield.el, warm > 0.02);
+    R.winds.forEach((w, i) => {
+      const u = ((clk * 0.55 + i * 0.2) % 1); const x = lerp(150, 60, u), y = 96 + i * 12, z = lerp(-140, -10, u);
+      const blocked = warm > 0.7; vis(w.el, !blocked); put(w.el, x, y, z, " rotateY(" + (-35) + "deg)"); w.el.style.opacity = (1 - warm) * Math.sin(Math.PI * u);
+    });
+    R.root.style.setProperty("--cold", (0.22 * (1 - warm)).toFixed(3));
+
+    /* 公仔：數位模型 → 切片預覽 → 實體 → 取下 → 上色 */
+    const phys = p > 0;
+    vis(R.holo, !phys);
+    const baseX = 0, baseY = BED_Y, baseZ = 0;
+    put(R.holo, 0, BED_Y, 0); put(R.plan, 0, BED_Y, 0);
+    const meshA = S.mesh;
+    R.hp.forEach((c) => { c.el.style.setProperty("--ha", (0.12 + 0.46 * meshA).toFixed(3)); c.el.style.setProperty("--hb", (1 - 0.5 * meshA).toFixed(3)); });
+    R.holo.classList.toggle("done", meshA >= 1);
+    R.holes.forEach((h) => { h.el.style.opacity = (1 - clamp(S.mesh * 1.4, 0, 1)).toFixed(3); vis(h.el, S.mesh < 0.72); });
+    vis(R.scanL.el, S.scan > 0); put(R.scanL.el, 0, BED_Y + S.scan * (FH + 6), 2);
+    vis(R.plan, S.plan > 0 && !phys);
+    R.layers.forEach((c, i) => vis(c.el, S.plan * 11 > i + 1));
+    vis(R.planBrim.el, S.plan > 0.78); R.planSupp.forEach((c) => vis(c.el, S.plan > 0.9)); put(R.planBrim.el, 0, 0, 2);
+
+    /* 實體 */
+    vis(R.fig, phys);
+    const lift = sm(S.lift), arcL = Math.sin(Math.PI * lift) * 70;
+    const fx = lerp(0, REST.x, lift), fy = lerp(BED_Y, REST.y, lift) + arcL, fz = lerp(printing ? Math.sin(clk * 6) * 7 : 0, REST.z, lift);
+    const wt = S.warp * 3.2;
+    const spinY = o.spin ? (clk * 40) % 360 : 0;
+    put(R.fig, fx, fy, fz, " rotateY(" + spinY.toFixed(1) + "deg)");
+    R.figB.style.transform = "rotateX(" + (-wt).toFixed(2) + "deg) rotateZ(" + (wt).toFixed(2) + "deg)";
+    vis(R.turn.el, S.lift > 0.5);
+    const sandK = S.sand, pn = S.paint, gl = S.gloss;
+    FIG.forEach((f, i) => {
+      const fr = clamp((p * FH - f.y) / f.h, 0, 1), c = R.parts[i];
+      vis(c.el, fr > 0.001); c.el.style.transform = "translate3d(" + f.x + "px," + (-f.y) + "px," + f.z + "px) scaleY(" + Math.max(fr, 0.001).toFixed(3) + ")";
+      let col = mixHex(PAL.raw, PAL.sanded, sandK);
+      if (pn > 0) { const base = mixHex(PAL.sanded, PAL.primer, seg(pn, 0, 0.26)); const k = seg(pn, PAINT_AT[f.pg][0], PAINT_AT[f.pg][1]); col = k > 0 ? mixHex(hexOf(base), PAL[f.col], k) : base; }
+      c.el.style.setProperty("--c", col);
+      if (f.id === "head") c.el.style.setProperty("--face", seg(pn, 0.84, 0.97).toFixed(2));
+    });
+    R.fig.style.setProperty("--gl", gl.toFixed(2)); R.fig.classList.toggle("smooth", sandK > 0.5); R.fig.classList.toggle("painted", pn > 0.01);
+    R.supps.forEach((c, i) => {
+      const f = SUPP[i], fr = clamp((p * FH - f.y) / f.h, 0, 1); const gone = S.cut > (i + 1) / 4 - 0.02;
+      vis(c.el, fr > 0.001 && !gone); c.el.style.transform = "translate3d(" + f.x + "px," + (-f.y) + "px," + f.z + "px) scaleY(" + Math.max(fr, 0.001).toFixed(3) + ")";
+    });
+    const big = S.brimBig > 0.02, bigK = clamp(S.brimBig * 1.2, 0, 1); const trimmed = S.cut > 0.85;
+    vis(R.brim0.el, phys && !big && !trimmed); vis(R.brim1.el, phys && big && !trimmed);
+    const bf = clamp(p / 0.03, 0, 1);
+    R.brim0.el.style.transform = "translate3d(0px,0px,0px) scaleY(" + Math.max(bf, 0.01) + ") rotateZ(" + (S.warp * 6).toFixed(2) + "deg)"; R.brim1.el.style.transform = "translate3d(0px,0px,0px) scaleY(" + Math.max(bigK, 0.01) + ")";
+    vis(R.warnL, S.warp > 0.5); put(R.warnL, 52, 20, 40, " rotateY(" + (-R.cs.ry).toFixed(1) + "deg)");
+
+    /* 工具 */
+    const cutting = S.cut > 0 && S.cut < 1, ci = clamp(Math.floor(S.cut * 4), 0, 3);
+    vis(R.cutter, cutting); if (cutting) put(R.cutter, REST.x + SUPP[ci].x * 1.0 + 20, REST.y + 66 + (Math.sin(clk * 14) > 0 ? 0 : 3), REST.z + SUPP[ci].z + 24);
+    const sanding = S.sand > 0 && S.sand < 1; vis(R.sand.el, sanding); if (sanding) put(R.sand.el, REST.x + 26 + Math.sin(clk * 12) * 4, REST.y + 40 + (S.sand * 0), REST.z + 6, "");
+    const spraying = S.paint > 0 && S.paint < 1; vis(R.spray.el, spraying); vis(R.mist, spraying);
+    if (spraying) {
+      const py = 20 + 50 * ((S.paint * 3) % 1); put(R.spray.el, REST.x + 44, py, REST.z + 8, " rotateZ(-30deg)"); put(R.mist, REST.x + 30, py + 8, REST.z + 8);
+    }
+  }
+  const hexOf = (rgb) => { const m = /(\d+),(\d+),(\d+)/.exec(rgb); return "#" + [1, 2, 3].map((i) => ("0" + (+m[i]).toString(16)).slice(-2)).join(""); };
+
+  /* 兩點之間的細線 */
+  function line(el, a, b) {
+    const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2]; const L = Math.hypot(dx, dy, dz) || 0.01;
+    const hyp = Math.hypot(dx, dz), yaw = Math.atan2(-dz, dx), pitch = Math.asin(clamp(-dy / L, -1, 1));
+    el.style.width = L.toFixed(1) + "px"; el.style.left = (-L / 2).toFixed(1) + "px";
+    el.style.transform = "translate3d(" + ((a[0] + b[0]) / 2).toFixed(1) + "px," + (-(a[1] + b[1]) / 2).toFixed(1) + "px," + ((a[2] + b[2]) / 2).toFixed(1) + "px) rotateY(" + (yaw * 180 / Math.PI).toFixed(2) + "deg) rotateZ(" + (pitch * 180 / Math.PI).toFixed(2) + "deg)"; void hyp;
+  }
+
+  /* 物件可點的提示 */
+  const setPickable = (R, on) => R.root.classList.toggle("pickable", !!on);
+
+  return { create, render, focus, zoom, setPickable, applyCam };
+})();
+
+</script>
+<script id="app-js">
+/* =====================================================================
+   呈現層：畫面、動畫、聲音、觸控。只呼叫邏輯層並顯示結果
+   ===================================================================== */
+(function () {
+  "use strict";
+  const C = CONFIG, L = Logic, STEPS = C.steps, QIDS = L.consts.QIDS, GATE = L.consts.GATE;
+  const $ = (s, r) => (r || document).querySelector(s);
+  const RM = () => !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+  /* 只用 textContent / createTextNode 放文字，不用 innerHTML 塞玩家會看到的字 */
+  function el(tag, attrs, ...kids) {
+    const e = document.createElement(tag);
+    for (const k in attrs || {}) {
+      const v = attrs[k];
+      if (k === "class") e.className = v;
+      else if (k.slice(0, 2) === "on") e.addEventListener(k.slice(2), v);
+      else if (v === true) e.setAttribute(k, "");
+      else if (v !== false && v != null) e.setAttribute(k, v);
+    }
+    kids.flat(3).forEach((c) => { if (c == null || c === false) return; e.append(c.nodeType ? c : document.createTextNode(String(c))); });
+    return e;
+  }
+  const para = (t, cls) => el("p", { class: cls || "" }, t);
+
+  /* ---------- 存檔 ---------- */
+  let ls = null; try { ls = window.localStorage; ls.setItem("__t", "1"); ls.removeItem("__t"); } catch (e) { ls = null; }
+  const store = L.makeStore(ls, C.storageKey);
+  const newSeed = () => Math.floor(Math.random() * 4294967294) + 1;
+  let state = L.restore(store.get(), Date.now(), newSeed());
+  let msgs = {}, picked = {}, learn = null, anim = null, focusQ = null, hintPhaseKey = "", R = null, linkMsg = null, idleTimer = 0, stageHost = null;
+  const persist = () => store.set(L.serialize(state));
+
+  /* ---------- 聲音：第一次點擊後才出聲 ---------- */
+  const Snd = {
+    ctx: null, on: false,
+    init() {
+      if (this.ctx) { if (this.ctx.state === "suspended") this.ctx.resume(); return; }
+      try { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; this.ctx = new AC(); if (this.ctx.state === "suspended") this.ctx.resume(); this.on = true; } catch (e) { this.on = false; }
+    },
+    tone(f, d, type, v, delay) {
+      if (!this.on) return;
+      try {
+        const t = this.ctx.currentTime + (delay || 0), o = this.ctx.createOscillator(), g = this.ctx.createGain();
+        o.type = type || "sine"; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v || 0.15, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+        o.connect(g); g.connect(this.ctx.destination); o.start(t); o.stop(t + d + 0.03);
+      } catch (e) { /* 忽略 */ }
+    },
+    click() { this.tone(880, 0.05, "square", 0.05); },
+    good() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.2, "triangle", 0.14, i * 0.11)); },
+    bad() { this.tone(190, 0.3, "sawtooth", 0.12); this.tone(140, 0.34, "sawtooth", 0.12, 0.17); },
+    whirr() { [220, 260, 300, 340].forEach((f, i) => this.tone(f, 0.12, "square", 0.04, i * 0.1)); }
+  };
+  document.addEventListener("pointerdown", () => Snd.init(), { capture: true });
+  const buzz = (ms) => { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* 忽略 */ } };
+  let toastTimer = 0;
+  function toast(text, kind) {
+    const t = $("#toast"); t.textContent = text; t.className = kind || ""; t.classList.remove("hidden");
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.add("hidden"), 3200);
+  }
+
+  function dispatch(a, quiet) {
+    const r = L.reduce(state, a, Date.now());
+    if (r.state !== state) { state = r.state; persist(); }
+    if (!quiet) render();
+    return r.fb;
+  }
+
+  /* ---------- 鏡頭與場景 ---------- */
+  const camKey = () => state.phase === "intro" ? "intro" : state.phase === "done" ? "done" : (STEPS[state.step].gate ? (focusQ || firstOpenQ()) : STEPS[state.step].qs[0]);
+  const firstOpenQ = () => STEPS[state.step].qs.find((q) => !state.done[q]) || STEPS[state.step].qs[0];
+  function sceneNow(clk, extra) {
+    if (!R) return;
+    const S = Anim.stateFor(state.done, state.started, null, 1);
+    Stage.render(R, S, Object.assign({ clk: clk || 0, spin: state.phase === "done" && !RM() }, extra || {}));
+  }
+  function ensureStage() {
+    if (!stageHost) {
+      stageHost = el("div", { class: "stagewrap" });
+      const root = el("div", { class: "stage3d", role: "img", "aria-label": "3D 列印工作檯：可以用手指或滑鼠拖曳旋轉" });
+      const tools = el("div", { class: "stagetools" },
+        el("button", { class: "btn ghost small", title: "回到這一步的重點視角", onclick: () => { Stage.focus(R, camKey()); } }, "🎯 重點視角"),
+        el("button", { class: "btn ghost small", "aria-label": "放大", onclick: () => Stage.zoom(R, 1.2) }, "＋"),
+        el("button", { class: "btn ghost small", "aria-label": "縮小", onclick: () => Stage.zoom(R, 1 / 1.2) }, "－"));
+      stageHost.append(root, tools, el("p", { class: "sub stagehint" }, "拖曳可以旋轉；點物件可以選取。"));
+      R = Stage.create(root); R.onPick = onPickObj;
+      Stage.focus(R, camKey(), true);
+    }
+    return stageHost;
+  }
+  function onPickObj(obj) {
+    if (state.phase !== "play" || anim) return;
+    const q = pickQuestion();
+    if (q && C.questions[q].pick.objs.includes(obj)) { answer(q, obj); return; }
+    toast("這是「" + C.objects[obj].name + "」", "info");
+  }
+  const pickQuestion = () => { const qs = STEPS[state.step].qs; const f = focusQ && qs.includes(focusQ) && !state.done[focusQ] ? focusQ : qs.find((q) => !state.done[q]); return f && C.questions[f].kind === "pick" ? f : null; };
+
+  /* ---------- 動畫 ---------- */
+  function playAnim(key, onDone) {
+    const dur = (C.timing.animMs * (Anim.DUR[key] || 1));
+    const printing = key === "startPrint" || key === "watch";
+    if (RM()) { sceneNow(0); setTimeout(onDone, 800); anim = { rm: true }; return; }
+    const t0 = performance.now(); const h = { raf: 0 }; anim = h; Snd.whirr();
+    const frame = (now) => {
+      const t = Math.min(1, (now - t0) / dur);
+      Stage.render(R, Anim.stateFor(state.done, state.started, key, t), { clk: (now - t0) / 1000, printing: printing && t > 0 && t < 1 });
+      if (t < 1) h.raf = requestAnimationFrame(frame); else setTimeout(onDone, 350);
+    };
+    h.raf = requestAnimationFrame(frame);
+  }
+  function afterAnim() {
+    anim = null; const fb = dispatch({ type: "animEnd" }, true);
+    if (state.phase === "done") { Snd.good(); }
+    focusQ = null; hintPhaseKey = ""; hideHint(); render(); Stage.focus(R, camKey());
+    sceneNow(0); void fb;
+  }
+
+  /* ---------- 通用元件 ---------- */
+  const msgBox = (key) => { const m = msgs[key]; return el("div", { class: "msg " + (m ? m.kind : ""), id: "msg-" + key, role: "status", "aria-live": "polite" }, m ? m.text : ""); };
+  function setMsg(key, text, kind) { msgs[key] = text ? { text, kind } : null; const b = $("#msg-" + key); if (b) { b.className = "msg " + (kind || ""); b.textContent = text || ""; } }
+  const busy = () => state.animating || !!anim;
+  const cdLeft = () => L.cooldownLeft(state, Date.now());
+  const dis = () => busy() || state.locked || cdLeft() > 0;
+
+  function answer(qid, opt) {
+    if (busy()) return; Snd.click();
+    if (STEPS[state.step].qs.indexOf(qid) < 0 || state.done[qid]) return;
+    const fb = dispatch({ type: "answer", qid, option: opt }, true);
+    if (!fb.ok) {
+      if (fb.kind === "cooldown") toast(C.msg.cooling.replace("{n}", Math.ceil(fb.leftMs / 1000)), "info");
+      chrome(); return;
+    }
+    if (fb.kind === "wrong") {
+      Snd.bad(); buzz(150); (picked[qid] = picked[qid] || {})[opt] = true;
+      setMsg(qid, C.msg.wrongHead + fb.text, "bad");
+      if (fb.lockedNow) toast("機器暫停，請找關主", "bad");
+      render(); return;
+    }
+    Snd.good(); learn = { qid, text: fb.learn };
+    setMsg(qid, "", ""); render();                       // 讓畫面進入「動畫中」狀態（按鈕鎖定）
+    $("#main").classList.add("busyview");
+    playAnim(fb.anim, afterAnim);
+  }
+  function onGate() {
+    if (busy()) return; Snd.click();
+    const fb = dispatch({ type: "startPrint" }, true);
+    if (!fb.ok) { if (fb.kind === "needChecks") toast(C.gate.locked, "info"); chrome(); return; }
+    learn = null; render(); Stage.focus(R, "startPrint"); playAnim("startPrint", afterAnim);
+  }
+
+  /* ---------- 各畫面 ---------- */
+  function readingsTable(qid) {
+    return el("table", { class: "readings" }, el("tbody", {}, L.readings(qid).map((r) => el("tr", {}, el("th", {}, r.label), el("td", {}, r.value)))));
+  }
+  function questionCard(qid, opts) {
+    const q = C.questions[qid], done = !!state.done[qid], active = opts && opts.active;
+    if (done) return el("div", { class: "qcard done" }, el("b", {}, "✔ " + q.title + "　已通過"));
+    const chosen = picked[qid] || {};
+    const body = [el("p", { class: "prompt" }, q.prompt)];
+    if (q.readings) body.push(readingsTable(qid));
+    body.push(el("div", { class: "reasons" }, L.optionsOf(state, qid).map((o) =>
+      el("button", { class: "opt" + (chosen[o.id] ? " wrong" : "") + (q.kind === "pick" ? " pickopt" : ""), "data-q": qid, "data-o": o.id, disabled: dis(), onclick: () => answer(qid, o.id) },
+        q.kind === "pick" && o.id !== "release" ? "👆 " + o.text : o.text))));
+    body.push(msgBox(qid));
+    return el("div", { class: "qcard" + (active ? " active" : ""), onclick: () => { if (focusQ !== qid && !anim) { focusQ = qid; Stage.focus(R, qid); hintPhaseKey = ""; render(); } } },
+      el("h3", {}, q.title), body);
+  }
+  function viewIntro() {
+    const linked = state.linked;
+    const input = el("input", { type: "text", inputmode: "numeric", maxlength: "3", id: "linkcode", placeholder: "第一關的 3 位數代碼", "aria-label": "第一關的代碼", autocomplete: "off" });
+    const doLink = () => {
+      Snd.click(); const fb = dispatch({ type: "link", code: input.value }, true);
+      if (fb.ok) { linkMsg = { text: C.story.linkOk + "（已帶入第 " + fb.group + " 組）", kind: "good" }; render(); }
+      else { linkMsg = { text: fb.kind === "badCode" ? "這個代碼不是第一關的代碼，請再確認一次（也可以略過，直接開始）。" : "目前不能輸入。", kind: "bad" }; render(); }
+    };
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") doLink(); });
+    return el("div", { class: "panel pop" },
+      el("h2", {}, C.title + "：" + C.subtitle), para(C.story.intro),
+      el("div", { class: "setting" }, el("b", {}, "第一關過關了嗎？（選填）"),
+        linked ? el("div", { class: "msg good" }, C.story.linkOk + "（第 " + state.group + " 組）") : el("div", { class: "row" }, input, el("button", { class: "btn small", onclick: doLink }, "確認")),
+        !linked && linkMsg ? el("div", { class: "msg " + linkMsg.kind }, linkMsg.text) : null),
+      el("button", { class: "btn big", id: "btnStart", onclick: () => { Snd.click(); dispatch({ type: "start" }); Stage.focus(R, camKey()); } }, "開始"));
+  }
+  function viewPlay() {
+    const st = STEPS[state.step];
+    const fq = focusQ && st.qs.includes(focusQ) && !state.done[focusQ] ? focusQ : firstOpenQ();
+    const right = [];
+    right.push(el("h2", {}, st.title));
+    if (learn && !anim) right.push(el("div", { class: "note-box learn" }, el("b", {}, "💡 上一步學到的："), learn.text));
+    if (st.gate) {
+      right.push(para("三項都要檢查，三項都通過才能開始列印。（可以點卡片切換，也可以直接點 3D 場景裡的物件。）", "sub"));
+      st.qs.forEach((q) => right.push(questionCard(q, { active: q === fq && !state.done[q] })));
+      const miss = L.missingChecks(state);
+      right.push(el("button", { class: "btn big green", id: "btnGate", disabled: miss.length > 0 || dis(), onclick: onGate }, C.gate.label));
+      right.push(para(miss.length ? C.gate.locked + "（還差 " + miss.length + " 項）" : C.gate.doneMsg, "sub"));
+    } else st.qs.forEach((q) => right.push(questionCard(q, { active: true })));
+    return el("div", { class: "panel grid2 pop" }, el("div", { class: "stickycol" }, ensureStage()), el("div", {}, right));
+  }
+  function viewDone() {
+    const info = L.successInfo(state);
+    const rev = el("details", { class: "panel", style: "margin-top:10px" }, el("summary", { style: "font-weight:800;cursor:pointer" }, "想一想（選做）：把剛剛學到的說出來"),
+      C.review.map((q, qi) => { const out = el("div", { class: "msg" });
+        return el("div", { class: "setting", style: "margin-top:10px" }, el("b", {}, (qi + 1) + ". " + q.q),
+          el("div", { class: "reasons" }, L.reviewOptions(state, qi).map((o) => el("button", { class: "opt", onclick: (ev) => {
+            const fb = dispatch({ type: "review", q: qi, option: o.id }, true); Snd.click();
+            ev.target.parentNode.querySelectorAll(".opt").forEach((b) => b.classList.remove("good", "wrong")); ev.target.classList.add(fb.correct ? "good" : "wrong");
+            out.className = "msg " + (fb.correct ? "good" : "bad"); out.textContent = fb.text;
+          } }, o.text))), out);
+      }));
+    const replay = el("button", { class: "btn ghost", id: "btnReplay", disabled: busy(), onclick: () => { if (busy()) return; const fb = dispatch({ type: "replay" }, true); if (!fb.ok) return; render(); playAnim("paint", () => { anim = null; dispatch({ type: "animEnd" }, true); render(); sceneNow(0); }); } }, "🔁 重播上色動畫");
+    const panel = el("div", { class: "panel pop", style: "border-color:var(--green)" },
+      el("h2", {}, "✔ 公仔完成！"), para(info.story),
+      el("div", { class: "codebox" }, el("div", { class: "sub" }, info.label), el("div", { class: "code" }, info.code)),
+      para(info.next), replay, rev);
+    return el("div", {}, panel, el("div", { style: "height:10px" }), el("div", { class: "panel" }, ensureStage()));
+  }
+  function view() {
+    switch (state.phase) {
+      case "intro": return el("div", { class: "grid2" }, el("div", { class: "panel stickycol" }, ensureStage()), viewIntro());
+      case "play": return viewPlay();
+      default: return viewDone();
+    }
+  }
+
+  /* ---------- 外框 ---------- */
+  function chrome() {
+    const cur = state.phase === "done" ? STEPS.length : (state.phase === "intro" ? -1 : state.step);
+    $("#chips").replaceChildren(...STEPS.map((s, i) => el("span", { class: "chip" + (i === cur ? " on" : (i < cur ? " fin" : "")) }, (i < cur ? "✓ " : (i + 1) + " ") + s.short)));
+    $("#grp").textContent = "第 " + state.group + " 組"; $("#donebadge").classList.toggle("hidden", !state.completed);
+    const hb = $("#hintbtn"); const hq = state.phase === "play" ? (STEPS[state.step].gate ? (focusQ && !state.done[focusQ] ? focusQ : firstOpenQ()) : STEPS[state.step].qs[0]) : null;
+    const show = hq && !state.done[hq]; hb.classList.toggle("hidden", !show); if (show) hb.textContent = "💡 提示（已看 " + state.hintSeen[hq] + "/3 層）";
+    $("#info").textContent = "第 " + state.group + " 組 · 答錯 " + state.failCount + " 次 · 提示 " + state.hintsUsed + " 次";
+    const lock = $("#lock"); const showLock = state.locked && !anim && !state.animating; lock.classList.toggle("hidden", !showLock);
+    if (showLock) $("#lockmsg").textContent = C.msg.lock.replace("{n}", C.timing.lockAfter);
+    updateBtns();
+  }
+  function updateBtns() {
+    const left = cdLeft(), d = dis();
+    document.querySelectorAll(".opt[data-q]").forEach((b) => { b.disabled = d; });
+    const g = $("#btnGate"); if (g) g.disabled = L.missingChecks(state).length > 0 || busy() || state.locked;
+    const cd = $("#cdline"); if (cd) { cd.textContent = left > 0 && !busy() ? C.msg.cooling.replace("{n}", Math.ceil(left / 1000)) : ""; }
+  }
+  function render() {
+    chrome(); if (anim) return;
+    const main = $("#main"); const keep = stageHost && stageHost.parentNode;
+    if (keep) keep.removeChild(stageHost);
+    main.classList.remove("busyview"); main.replaceChildren(view());
+    if (state.phase === "play" && !$("#cdline")) { /* 冷卻提示列放在面板最上面 */ const p = $("#main .panel"); if (p) p.prepend(el("div", { id: "cdline", class: "cdline", role: "status" })); }
+    sceneNow(0); chrome();
+    const k = state.phase + ":" + state.step + ":" + (focusQ || ""); if (k !== hintPhaseKey) { hintPhaseKey = k; hideHint(); }
+  }
+
+  /* ---------- 提示 ---------- */
+  function hideHint() { const s = $("#hintsheet"); if (s) s.classList.add("hidden"); }
+  function onHint() {
+    Snd.click(); const qid = state.phase === "play" ? (STEPS[state.step].gate ? (focusQ && !state.done[focusQ] ? focusQ : firstOpenQ()) : STEPS[state.step].qs[0]) : null;
+    if (!qid) return; const fb = dispatch({ type: "hint", qid }, true); chrome(); if (!fb.ok) return;
+    const s = $("#hintsheet"); s.replaceChildren(el("div", { class: "row spread" }, el("span", { class: "lv" }, "💡 提示　第 " + fb.level + " / 3 層"), el("button", { class: "btn ghost small", onclick: hideHint }, "關閉")), el("p", { style: "margin:6px 0 0;font-size:20px" }, fb.text));
+    s.classList.remove("hidden");
+  }
+
+  /* ---------- 關主：長按 3 秒 → PIN → 面板 ---------- */
+  function makeHold(btn) {
+    let timer = 0, raf = 0, t0 = 0; const ring = btn.querySelector(".ring");
+    const stop = () => { clearTimeout(timer); cancelAnimationFrame(raf); timer = 0; if (ring) ring.style.setProperty("--p", "0deg"); };
+    btn.style.touchAction = "none";
+    btn.addEventListener("contextmenu", (e) => e.preventDefault());
+    btn.addEventListener("pointerdown", (e) => {
+      e.preventDefault(); Snd.init(); t0 = performance.now();
+      const step = () => { const p = Math.min(1, (performance.now() - t0) / C.timing.holdMs); if (ring) ring.style.setProperty("--p", p * 360 + "deg"); if (p < 1) raf = requestAnimationFrame(step); };
+      step(); timer = setTimeout(() => { stop(); openPin(); }, C.timing.holdMs);
+    });
+    ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => btn.addEventListener(ev, () => { if (timer) { stop(); toast("關主專用：要長按 " + Math.round(C.timing.holdMs / 1000) + " 秒", "info"); } }));
+  }
+  let wrongPins = 0, pinBlockUntil = 0;
+  function closeOverlay() { const o = $("#adm"); o.classList.add("hidden"); o.replaceChildren(); }
+  function openPin() {
+    let pin = ""; const o = $("#adm"); o.classList.remove("hidden");
+    const dots = el("div", { class: "pindots" }, ""); const info = el("div", { class: "msg" });
+    const upd = () => { dots.textContent = "●".repeat(pin.length) + "○".repeat(Math.max(0, 4 - pin.length)); };
+    const submit = () => {
+      if (Date.now() < pinBlockUntil) { info.className = "msg bad"; info.textContent = "輸入錯誤太多次，請 " + Math.ceil((pinBlockUntil - Date.now()) / 1000) + " 秒後再試"; return; }
+      if (L.checkPin(pin)) { wrongPins = 0; openAdmin(pin); return; }
+      wrongPins++; pin = ""; upd(); info.className = "msg bad"; info.textContent = "PIN 不正確"; $("#adm .box").classList.remove("shake"); void $("#adm .box").offsetWidth; $("#adm .box").classList.add("shake");
+      if (wrongPins >= 3) { pinBlockUntil = Date.now() + 30000; wrongPins = 0; info.textContent = "連續錯誤 3 次，鎖定 30 秒"; }
+    };
+    const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "確定"].map((k) => el("button", { onclick: () => {
+      if (k === "⌫") pin = pin.slice(0, -1); else if (k === "確定") { submit(); return; } else if (pin.length < 4) pin += k; upd(); if (pin.length === 4 && k !== "⌫") submit();
+    } }, k));
+    o.replaceChildren(el("div", { class: "box" }, el("h2", {}, "關主驗證"), para("請輸入 4 位數 PIN", "sub"), dots, el("div", { class: "keypad" }, keys), info, el("button", { class: "btn ghost", onclick: closeOverlay }, "取消")));
+    upd();
+  }
+  function openAdmin(pin) {
+    let g = Math.min(C.groupCodes.length, state.group + 1);
+    const o = $("#adm"); const out = el("output", {}, String(g)); const codeLine = el("div", { class: "sub" });
+    const upd = () => { out.textContent = String(g); codeLine.textContent = "第 " + g + " 組的過關代碼：" + L.codeFor(g); };
+    const step = (d) => { g = Math.max(1, Math.min(C.groupCodes.length, g + d)); upd(); };
+    const doUnlock = () => { const fb = dispatch({ type: "unlock", pin }, true); if (fb.ok) { toast("已解鎖，可以繼續", "good"); closeOverlay(); render(); } };
+    const doReset = () => {
+      const fb = dispatch({ type: "reset", pin, group: g, seed: newSeed() }, true);
+      if (fb.ok) { store.del(); persist(); msgs = {}; picked = {}; learn = null; anim = null; focusQ = null; linkMsg = null; hintPhaseKey = ""; closeOverlay(); hideHint(); render(); Stage.focus(R, camKey(), true); toast("已重來，換第 " + state.group + " 組", "good"); }
+    };
+    o.replaceChildren(el("div", { class: "box" }, el("h2", {}, "關主面板"),
+      el("p", { class: "sub" }, "目前：第 " + state.group + " 組 · 答錯 " + state.failCount + " 次 · 提示 " + state.hintsUsed + " 次" + (state.locked ? " · 已鎖機" : "") + (state.completed ? " · 已完成" : "")),
+      state.locked ? el("button", { class: "btn big green", onclick: doUnlock }, "解鎖機器（讓這組繼續）") : null,
+      el("hr", { style: "border-color:var(--line);margin:14px 0" }),
+      el("b", {}, "重來，並換到下一組"), el("div", { class: "stepper" }, el("button", { onclick: () => step(-1) }, "−"), out, el("button", { onclick: () => step(1) }, "＋")), codeLine,
+      el("button", { class: "btn big", style: "margin-top:8px", onclick: doReset }, "重來（全部清空）"),
+      el("button", { class: "btn ghost", style: "margin-top:10px;width:100%", onclick: closeOverlay }, "關閉")));
+    upd();
+  }
+
+  /* ---------- 啟動 ---------- */
+  function boot() {
+    document.title = C.title + "｜" + C.subtitle;
+    $("#brandT").textContent = C.title; $("#brandS").textContent = C.subtitle;
+    $("#hintbtn").addEventListener("click", onHint);
+    makeHold($("#gear")); makeHold($("#lockhold"));
+    render();
+    setInterval(updateBtns, 250);
+    /* 閒置時讓冷風、公仔慢慢動；動畫播放中、或使用者設定減少動態時不跑 */
+    idleTimer = setInterval(() => { if (anim || RM() || document.hidden || !R) return; const S = Anim.stateFor(state.done, state.started, null, 1); if (S.warm < 1 || state.phase === "done") sceneNow(performance.now() / 1000); }, 70);
+    if (/(^|[?&])test=1(&|$)/.test(location.search)) Tests.render($("#app"));
+  }
+  boot();
+})();
+
+</script>
+</body>
+</html>
