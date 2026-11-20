@@ -159,7 +159,7 @@ ol.steps b.n{color:var(--navy);font-size:17px}
   if (typeof module !== "undefined") module.exports = g.Engine;
 })(typeof window !== "undefined" ? window : globalThis);
 </script><script>(function () {
-  const CONFIG = { ENDPOINT: "https://script.google.com/a/macros/tmail.ilc.edu.tw/s/AKfycbxhP5dvZWlYTboJ1t3FlL7BTe5V6ONRDeOVenEaKl9q7EmcGwWSVHXh89rBat4l1IHH9Q/exec", TOKEN: "TLPS" }; /* 老師部署 Apps Script 後，把網址貼到 ENDPOINT；留空則不顯示「送出」按鈕 */
+  const CONFIG = { ENDPOINT: "https://script.google.com/macros/s/AKfycbzkH3YOrp43MVAw_w7CYOsGoCQMDDmabJY0OgEv6yWuW-U_XaVJiAxjKf9yDAwrBpgtUw/exec", TOKEN: "TLPS" }; /* 老師部署 Apps Script 後，把網址貼到 ENDPOINT；留空則不顯示「送出」按鈕 */
   const E = window.Engine, $ = (s, r) => (r || document).querySelector(s), $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }, del(k) { try { localStorage.removeItem(k); } catch (e) { } } };
