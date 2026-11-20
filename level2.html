@@ -440,6 +440,99 @@ const CONFIG = {
   CONFIG.banks = { A: { label: "A 套", env: CONFIG.env, fila: CONFIG.fila, plate: CONFIG.plate, questions: CONFIG.questions }, B, C: Cc, D };
 })();
 
+/* =====================================================================
+   探索機關（解謎玩法）：每一步先「找東西 → 放進道具欄 → 組合 → 用在機器上」，解開機關後才出現該步的題目。
+   ※ 這一層只有「動手找、動手用」，不含任何題庫專屬的數字，所以四套題庫（A～D）通用。
+   ※ 教學提醒：這裡的線索只指出「要觀察哪裡、要注意什麼」，不直接說出題目的答案。
+   enabled:false 或網址加 ?explore=0 就會關閉，回到原本「直接答題」的版本。
+   ===================================================================== */
+CONFIG.explore = {
+  enabled: true,
+  storageKeySuffix: "-x",
+  /* 場景裡可以點的地方：3D 物件（kind:"3d"）與工作檯邊的架子（kind:"shelf"） */
+  spots: {
+    screen: { name: "觸控螢幕", icon: "🖥️", kind: "3d" }, spool: { name: "線材卷", icon: "🧵", kind: "3d" },
+    nozzle: { name: "噴頭", icon: "🔧", kind: "3d" }, fan: { name: "散熱風扇", icon: "🌀", kind: "3d" },
+    knob: { name: "調平旋鈕", icon: "🎛️", kind: "3d" }, bed: { name: "列印平台", icon: "🟫", kind: "3d" },
+    toolbox: { name: "工具箱", icon: "🧰", kind: "shelf" }, supply: { name: "材料架", icon: "📦", kind: "shelf" },
+    board: { name: "布告欄", icon: "📋", kind: "shelf" }, rack: { name: "噴漆架", icon: "🎨", kind: "shelf" }
+  },
+  /* 道具；keep:true 是工具，過了這一步還會留在道具欄 */
+  items: {
+    model: { name: "公仔模型檔", icon: "📄" }, lens: { name: "放大鏡", icon: "🔍", keep: true }, report: { name: "模型檢查報告", icon: "📑" },
+    note: { name: "現場便條", icon: "📝" }, preview: { name: "切片預覽", icon: "🧊" }, map: { name: "懸空標記圖", icon: "🗺️" },
+    checklist: { name: "列印前檢核表", icon: "✅" },
+    cutters: { name: "斜口鉗", icon: "✂️" }, sandC: { name: "粗砂紙", icon: "🟫" }, sandF: { name: "細砂紙", icon: "⬜" },
+    sandset: { name: "砂紙組", icon: "📚" }, toolkit: { name: "素模處理組", icon: "🧰" },
+    primer: { name: "底漆", icon: "⚪" }, paint: { name: "壓克力顏料", icon: "🟠" }, clear: { name: "透明保護漆", icon: "✨" },
+    base: { name: "已上色的公仔", icon: "🎨" }, finished: { name: "完成上色的公仔", icon: "🏆" }
+  },
+  steps: {
+    design: {
+      goal: "AI 生成的模型，印之前要先確認。找到模型檔，再找工具把它看仔細。",
+      finds: { screen: [{ give: "model", text: "螢幕上有一個剛生成好的公仔模型檔，先收進道具欄。" }], toolbox: [{ give: "lens", text: "工具箱裡有一支放大鏡，很好用。" }] },
+      recipes: [{ a: "model", b: "lens", out: "report", text: "用放大鏡把模型從頭到腳看了一遍，檢查報告列出了幾處「需要確認」的地方。" }],
+      unlock: { item: "report", on: "screen", text: "把檢查報告貼上螢幕，這一步的任務單跳了出來！" },
+      tips: ["先看看螢幕，再打開工具箱。", "道具欄裡的兩樣東西，點一樣再點另一樣，看看能不能組合。", "點選一個道具（會亮起來），再點場景裡的機器，就是「使用」。"]
+    },
+    buy: {
+      goal: "先弄清楚這次活動的現場狀況，再去選購材料。",
+      finds: { board: [{ give: "note", text: "布告欄上貼著一張便條：選機型和耗材之前，先想「在哪裡用、旁邊有誰、要印幾個」。" }] },
+      recipes: [],
+      unlock: { item: "note", on: "supply", text: "帶著便條走到材料架，採購單攤開了！" },
+      tips: ["工作檯旁邊有幾個架子，每一個都可以點。", "布告欄上可能有東西可以拿。", "拿到便條後，點選它，再點「材料架」。"]
+    },
+    slice: {
+      goal: "先找出公仔哪些地方是懸空的，再決定切片怎麼設。",
+      finds: {
+        screen: [{ give: "preview", text: "螢幕上顯示公仔的切片預覽，一層一層往上疊。" }],
+        toolbox: [{ give: "lens", text: "工具箱裡還有一支放大鏡。", ifMissing: true }]
+      },
+      recipes: [{ a: "preview", b: "lens", out: "map", text: "放大看預覽：好幾個地方被畫上了紅圈，那些地方的下面是空的。" }],
+      unlock: { item: "map", on: "screen", text: "把標記圖貼上去，切片設定表展開了！" },
+      tips: ["螢幕上有這一步要看的東西。", "預覽圖太小，要找工具把它看清楚。", "預覽圖＋放大鏡，做出標記圖後點它，再點螢幕。"]
+    },
+    check: {
+      goal: "開始列印前有三項檢核。先找到檢核表。",
+      finds: { toolbox: [{ give: "checklist", text: "工具箱裡有一張列印前檢核表：耗材、板子、環境，一項都不能少。" }] },
+      recipes: [],
+      unlock: { item: "checklist", on: "screen", text: "檢核表掃進系統，三張檢核卡亮了起來！" },
+      tips: ["這一步需要的東西在工具箱。", "找到檢核表後，點選它。", "再點螢幕，把檢核表交給機器。"]
+    },
+    watch: {
+      goal: "列印中要在旁邊看著。拿放大鏡，仔細看看平台上的底座。",
+      finds: { toolbox: [{ give: "lens", text: "工具箱裡還有一支放大鏡。", ifMissing: true }] },
+      recipes: [],
+      unlock: { item: "lens", on: "bed", keepItem: true, text: "放大鏡湊近列印平台：底座有一個角看起來不太對勁。" },
+      tips: ["巡檢要「看」，找一樣能看細節的工具。", "道具欄裡的放大鏡，點它。", "再點列印平台。"]
+    },
+    post: {
+      goal: "取件與處理素模要用對工具。砂紙有粗有細，想想看怎麼組。",
+      finds: { supply: [{ give: "cutters", text: "材料架上有一把斜口鉗。" }, { give: "sandC", text: "又找到一張粗砂紙。" }, { give: "sandF", text: "還有一張細砂紙。" }] },
+      recipes: [
+        { a: "sandC", b: "sandF", ordered: true, out: "sandset", text: "兩張砂紙組成了砂紙組。" },
+        { a: "cutters", b: "sandset", out: "toolkit", text: "斜口鉗加砂紙組，素模處理組完成了。" }
+      ],
+      unlock: { item: "toolkit", on: "bed", text: "把工具組放到公仔旁邊，這一步的任務單攤開了！" },
+      tips: ["材料架可以連續點好幾次。", "有些東西要「有順序」地組合，順序反了就沒效果。", "做好素模處理組後，點它，再點列印平台。"]
+    },
+    paint: {
+      goal: "上色有一定的順序。噴漆架上有三樣東西，想想看怎麼接。",
+      finds: { rack: [{ give: "primer", text: "噴漆架上有一罐底漆。" }, { give: "paint", text: "又找到壓克力顏料。" }, { give: "clear", text: "最後一樣是透明保護漆。" }] },
+      recipes: [
+        { a: "primer", b: "paint", ordered: true, out: "base", text: "公仔有了顏色。" },
+        { a: "base", b: "clear", ordered: true, out: "finished", text: "最後蓋上一層保護，公仔完成了。" }
+      ],
+      unlock: { item: "finished", on: "bed", text: "把完成的公仔放上展示台，這一步的任務單攤開了！" },
+      tips: ["噴漆架可以連續點好幾次。", "三樣東西有先後，順序反了組不起來。", "組出完成的公仔後，點它，再點列印平台。"]
+    }
+  },
+  msg: {
+    empty: "這裡現在沒有新發現。", nothing: "這樣用沒有反應。", noCombine: "這兩樣東西湊不在一起。", order: "這樣組合沒有效果，換個順序試試。",
+    have: "你已經有這個了。", locked: "先完成上面的機關，題目才會出現。", select: "已選取「{n}」。點另一個道具可以組合，點場景裡的機器可以使用。"
+  }
+};
+
 </script>
 <script id="artdata">
 /* 由 make_art.py 產生：把圖內嵌成 data URI。缺哪張，畫面就自動退回程式畫的版本。 */
@@ -725,6 +818,50 @@ input[type=text]{min-height:52px;font-size:22px;padding:6px 12px;border-radius:1
 @media (max-width:640px){.artimg.hero{max-height:170px}.artimg.banner{max-height:100px}}
 @media (prefers-reduced-motion:no-preference){.artimg{animation:artin .35s ease-out}}@keyframes artin{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
 .artimg.stamp{display:inline-block;height:46px;width:auto;margin:0 8px 0 0;vertical-align:middle}.artimg.badge{display:inline-block;height:40px;width:40px;margin:0 8px 0 0;vertical-align:middle}header.top>.artimg.badge{margin:0}
+
+/* ===== 探索機關（解謎玩法）===== */
+.explore{display:grid;gap:8px;margin-top:10px}
+.exgoal{background:rgba(255,210,77,.12);border:2px solid var(--amber);border-radius:12px;padding:8px 12px;font-size:17px;font-weight:700;line-height:1.45}
+.exlabel{font-size:14px;font-weight:800;color:var(--amber)}
+.exlabel .selnote{color:var(--green)}
+.exrow{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.tile{flex:0 0 auto;min-width:84px;min-height:76px;padding:6px 8px;border-radius:14px;border:2px solid var(--line);background:#0e1c34;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:14px;line-height:1.2}
+.tile .ic{font-size:28px;line-height:1}.tile .nm{font-weight:700;text-align:center}
+.tile.item{border-color:#4aa3ff}
+.tile.sel{border-color:var(--orange);background:rgba(255,138,31,.22);box-shadow:0 0 0 3px var(--orange) inset;transform:translateY(-2px)}
+.tile.spot:active,.tile.item:active{transform:scale(.96)}
+.emptyinv{opacity:.75;font-size:15px;align-self:center;padding:8px 4px}
+.exmsg{min-height:1.4em;font-size:16px}
+.msg.exmsg.hint{border-color:var(--amber);background:rgba(255,210,77,.1)}
+.exbtns{gap:8px;flex-wrap:wrap}
+.exnotes{background:#0e1c34;border:2px solid var(--line);border-radius:12px;padding:6px 12px}
+.exnotes summary{cursor:pointer;font-weight:800;min-height:40px;display:flex;align-items:center}
+.exnotes ul{margin:4px 0 8px;padding-left:20px;font-size:16px;line-height:1.5}
+.qcard.lockedq{border-style:dashed;opacity:.92}
+.pickable .stage3d,.stage3d.pickable{outline:2px dashed rgba(255,210,77,.55);outline-offset:-4px}
+
+/* ===== 手機優化 ===== */
+@media (pointer:coarse){
+  .stagetools{flex-wrap:wrap;justify-content:flex-end;max-width:calc(100% - 12px)}
+  .stagetools .btn.small{min-height:44px;min-width:44px;font-size:14px}
+  .opt{min-height:64px;font-size:18px}
+  .chip{min-height:34px;display:inline-flex;align-items:center;justify-content:center}
+  #gear{min-width:46px;min-height:46px}
+}
+@media (max-width:640px){
+  main#main{padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right))}
+  .panel{padding:12px}
+  .stage3d{aspect-ratio:1/1;max-height:52dvh}
+  .stagehint{font-size:13px;margin:4px 0}
+  .foot{padding-bottom:max(8px,env(safe-area-inset-bottom))}
+  #hintsheet{bottom:calc(92px + env(safe-area-inset-bottom));width:94vw}
+  .tile{min-width:80px;min-height:74px}
+  .exgoal{font-size:16px}
+}
+@media (max-width:860px) and (orientation:landscape) and (max-height:520px){
+  .grid2{grid-template-columns:1fr 1fr}.stage3d{aspect-ratio:4/3;max-height:62dvh}
+  #app{padding-bottom:70px}.top{position:static}
+}
 
 </style>
 </head>
@@ -1108,6 +1245,97 @@ const Logic = (() => {
 })();
 
 </script>
+<script id="explore">
+/* =====================================================================
+   探索層（純邏輯，不碰畫面）：找東西 → 道具欄 → 組合 → 用在機器上解鎖。
+   狀態是一個小物件，所有函式回傳新狀態與回饋，方便測試。
+   ===================================================================== */
+const Explore = (() => {
+  "use strict";
+  const X = () => CONFIG.explore;
+  const clone = (s) => JSON.parse(JSON.stringify(s));
+  const enabled = () => !!(X() && X().enabled);
+  const puzzleOf = (stepId) => (enabled() && X().steps[stepId]) || null;
+  const fresh = () => ({ v: 1, inv: [], given: {}, unlocked: {}, notes: [], hintLv: {} });
+  const isUnlocked = (s, stepId) => !puzzleOf(stepId) || !!s.unlocked[stepId];
+  const has = (s, id) => s.inv.indexOf(id) >= 0;
+  const itemName = (id) => (X().items[id] || { name: id }).name;
+  const spotName = (id) => (X().spots[id] || { name: id }).name;
+  const addItem = (s, id) => { if (!has(s, id)) s.inv.push(id); };
+  const dropItem = (s, id) => { s.inv = s.inv.filter((x) => x !== id); };
+
+  /* 沒選道具，直接點一個地方：依序拿出那個地方在這一步放的東西 */
+  function tapSpot(s0, stepId, spot) {
+    const s = clone(s0), P = puzzleOf(stepId), list = (P && P.finds[spot]) || [], key = stepId + ":" + spot;
+    let n = s.given[key] || 0;
+    while (n < list.length) {
+      const e = list[n]; n++;
+      if (e.ifMissing && has(s, e.give)) continue;
+      s.given[key] = n; addItem(s, e.give); s.notes.push({ item: e.give, text: e.text });
+      return { s, fb: { kind: "give", item: e.give, text: e.text } };
+    }
+    s.given[key] = n;
+    return { s, fb: { kind: "empty", text: spotName(spot) + "：" + X().msg.empty } };
+  }
+
+  /* 兩個道具組合：a＝先點的，b＝後點的 */
+  function combine(s0, stepId, a, b) {
+    const s = clone(s0), P = puzzleOf(stepId);
+    if (!has(s, a) || !has(s, b) || a === b) return { s, fb: { kind: "nothing", text: X().msg.noCombine } };
+    const rs = (P && P.recipes) || [];
+    const hit = rs.find((r) => r.a === a && r.b === b) || rs.find((r) => !r.ordered && r.a === b && r.b === a);
+    if (hit) {
+      [hit.a, hit.b].forEach((id) => { if (!(X().items[id] || {}).keep) dropItem(s, id); });
+      addItem(s, hit.out); s.notes.push({ item: hit.out, text: hit.text });
+      return { s, fb: { kind: "made", item: hit.out, text: hit.text } };
+    }
+    const rev = rs.find((r) => r.ordered && r.a === b && r.b === a);
+    return { s, fb: { kind: rev ? "order" : "nothing", text: rev ? X().msg.order : X().msg.noCombine } };
+  }
+
+  /* 選了道具，再點一個地方：用得對就解鎖這一步 */
+  function useItem(s0, stepId, item, spot) {
+    const s = clone(s0), P = puzzleOf(stepId);
+    if (!has(s, item)) return { s, fb: { kind: "nothing", text: X().msg.nothing } };
+    if (P && !s.unlocked[stepId] && P.unlock.item === item && P.unlock.on === spot) {
+      s.unlocked[stepId] = true; if (!P.unlock.keepItem && !(X().items[item] || {}).keep) dropItem(s, item);
+      s.notes.push({ item: null, text: P.unlock.text });
+      return { s, fb: { kind: "unlock", text: P.unlock.text } };
+    }
+    return { s, fb: { kind: "nothing", text: X().msg.nothing } };
+  }
+
+  /* 進到下一步：把用不到的消耗品清掉，只留工具 */
+  function advance(s0) { const s = clone(s0); s.inv = s.inv.filter((id) => (X().items[id] || {}).keep); return s; }
+  /* 關主按「略過機關」 */
+  function skip(s0, stepId) { const s = clone(s0); s.unlocked[stepId] = true; return s; }
+  /* 求助：三層提示，一層比一層明顯；不扣分 */
+  function hint(s0, stepId) {
+    const s = clone(s0), P = puzzleOf(stepId); if (!P) return { s, level: 0, text: "" };
+    const lv = Math.min((s.hintLv[stepId] || 0) + 1, P.tips.length); s.hintLv[stepId] = lv;
+    return { s, level: lv, text: P.tips[lv - 1] };
+  }
+  const serialize = (s) => JSON.stringify(s);
+  function restore(json) {
+    try { const o = JSON.parse(json); if (!o || o.v !== 1 || !Array.isArray(o.inv) || typeof o.given !== "object" || typeof o.unlocked !== "object" || !Array.isArray(o.notes)) return fresh();
+      o.inv = o.inv.filter((id) => typeof id === "string" && Object.prototype.hasOwnProperty.call(X().items, id)); o.hintLv = o.hintLv && typeof o.hintLv === "object" ? o.hintLv : {}; return o; } catch (e) { return fresh(); }
+  }
+  /* 這一步還有沒有辦法解開？（給測試用：從頭走一遍規則） */
+  function solvable(stepId) {
+    const P = puzzleOf(stepId); if (!P) return true;
+    let s = fresh(); const owned = new Set();
+    for (let guard = 0; guard < 40; guard++) {
+      let moved = false;
+      Object.keys(P.finds).forEach((sp) => P.finds[sp].forEach((e) => { if (!owned.has(e.give)) { owned.add(e.give); moved = true; } }));
+      P.recipes.forEach((r) => { if (owned.has(r.a) && owned.has(r.b) && !owned.has(r.out)) { owned.add(r.out); moved = true; } });
+      if (!moved) break;
+    }
+    return owned.has(P.unlock.item);
+  }
+  return { enabled, puzzleOf, fresh, isUnlocked, has, itemName, spotName, tapSpot, combine, useItem, advance, skip, hint, serialize, restore, solvable };
+})();
+
+</script>
 <script id="tests">
 /* =====================================================================
    自動測試（對應「自動測試表」）。網址加 ?test=1 會在頁面上顯示通過／失敗
@@ -1466,6 +1694,57 @@ const Tests = (() => {
     forBanks((k) => { const o = C.questions.slice.options;
       o.filter((x) => x.correct).forEach((x) => ok(/手/.test(x.text) && /身體/.test(x.text) && /支撐開在/.test(x.text), k + " 正解要含手與身體的下方支撐：" + x.text));
       o.filter((x) => !x.correct && /只開在/.test(x.text)).forEach((x) => ok(!/身體/.test(x.text), k + " 只撐一處的選項不該提到身體：" + x.text)); });
+  });
+
+  /* ---------- 探索機關（解謎玩法）---------- */
+  const EXC = C.explore, EXS = () => (typeof Explore !== "undefined" ? Explore : null);
+  T("T14-1 每一步都有機關設定，用到的道具與地點都有定義，而且規則上解得開", () => {
+    const E = EXS(); ok(E, "找不到 Explore"); ok(EXC && EXC.enabled, "探索機關應預設開啟");
+    STEPS.forEach((st) => { const P = EXC.steps[st.id]; ok(P, st.id + " 沒有機關設定"); ok(P.goal && P.tips.length === 3, st.id + " 要有目標與三層提示");
+      Object.keys(P.finds).forEach((sp) => { ok(EXC.spots[sp], st.id + " 地點未定義：" + sp); P.finds[sp].forEach((e) => ok(EXC.items[e.give] && e.text, st.id + " 道具未定義：" + e.give)); });
+      P.recipes.forEach((r) => ok(EXC.items[r.a] && EXC.items[r.b] && EXC.items[r.out], st.id + " 組合用到未定義道具"));
+      ok(EXC.spots[P.unlock.on] && EXC.items[P.unlock.item], st.id + " 解鎖規則未定義"); ok(E.solvable(st.id), st.id + " 無法解開"); });
+  });
+  T("T14-2 照著規則走：每一步都能實際解鎖，解鎖前題目是鎖著的", () => {
+    const E = EXS();
+    STEPS.forEach((st) => { let s = E.fresh(); ok(!E.isUnlocked(s, st.id), st.id + " 一開始應鎖著"); const P = EXC.steps[st.id];
+      for (let g = 0; g < 30 && !E.isUnlocked(s, st.id); g++) {
+        Object.keys(P.finds).forEach((sp) => { for (let i = 0; i < 4; i++) s = E.tapSpot(s, st.id, sp).s; });
+        P.recipes.forEach((r) => { if (E.has(s, r.a) && E.has(s, r.b)) s = E.combine(s, st.id, r.a, r.b).s; });
+        if (E.has(s, P.unlock.item)) s = E.useItem(s, st.id, P.unlock.item, P.unlock.on).s;
+      }
+      ok(E.isUnlocked(s, st.id), st.id + " 沒有解開"); });
+  });
+  T("T14-3 用錯地方、順序反了、拿不到的東西：都不會解鎖，也不會弄壞狀態", () => {
+    const E = EXS(); let s = E.fresh();
+    s = E.tapSpot(s, "design", "screen").s; s = E.tapSpot(s, "design", "toolbox").s; s = E.combine(s, "design", "model", "lens").s;
+    ok(E.has(s, "report")); const bad = E.useItem(s, "design", "report", "bed"); eq(bad.fb.kind, "nothing"); ok(!E.isUnlocked(bad.s, "design"));
+    eq(E.useItem(s, "design", "note", "screen").fb.kind, "nothing"); eq(E.combine(s, "design", "report", "report").fb.kind, "nothing");
+    let p = E.fresh(); for (let i = 0; i < 3; i++) p = E.tapSpot(p, "post", "supply").s;
+    const rev = E.combine(p, "post", "sandF", "sandC"); eq(rev.fb.kind, "order"); ok(!E.has(rev.s, "sandset"), "順序反了不該做出砂紙組");
+    eq(E.combine(p, "post", "sandC", "sandF").fb.kind, "made");
+    let q = E.fresh(); for (let i = 0; i < 3; i++) q = E.tapSpot(q, "paint", "rack").s;
+    eq(E.combine(q, "paint", "clear", "primer").fb.kind, "nothing"); eq(E.combine(q, "paint", "paint", "primer").fb.kind, "order");
+  });
+  T("T14-4 工具（放大鏡）會留到下一步；消耗品過關後清掉；同一地點不會重複給同一個道具", () => {
+    const E = EXS(); let s = E.fresh(); s = E.tapSpot(s, "design", "toolbox").s; s = E.tapSpot(s, "design", "screen").s;
+    s = E.combine(s, "design", "model", "lens").s; s = E.useItem(s, "design", "report", "screen").s; s = E.advance(s);
+    eq(s.inv, ["lens"]); const again = E.tapSpot(E.tapSpot(E.fresh(), "design", "toolbox").s, "design", "toolbox"); eq(again.fb.kind, "empty");
+    const t3 = E.tapSpot(s, "slice", "toolbox"); eq(t3.fb.kind, "empty", "已經有放大鏡，不該再給");
+    const t3b = E.tapSpot(E.fresh(), "slice", "toolbox"); eq(t3b.fb.kind, "give");
+  });
+  T("T14-5 存檔還原：正常資料可還原；壞資料、舊版本、被亂塞的道具都會被擋掉；關主可略過機關", () => {
+    const E = EXS(); let s = E.tapSpot(E.fresh(), "design", "screen").s; eq(E.restore(E.serialize(s)).inv, ["model"]);
+    eq(E.restore("{壞掉").inv, []); eq(E.restore(JSON.stringify({ v: 9 })).inv, []); eq(E.restore("null").inv, []);
+    const hack = JSON.parse(E.serialize(s)); hack.inv.push("__proto__", "不存在的道具"); eq(E.restore(JSON.stringify(hack)).inv, ["model"]);
+    ok(E.isUnlocked(E.skip(E.fresh(), "design"), "design"));
+  });
+  T("T14-6 關掉探索機關（enabled:false）時，所有步驟都直接開放", () => {
+    const E = EXS(); EXC.enabled = false; try { STEPS.forEach((st) => ok(E.isUnlocked(E.fresh(), st.id), st.id + " 應直接開放")); } finally { EXC.enabled = true; }
+  });
+  T("T14-7 不能在機關文字裡放 HTML（畫面只用文字節點，但仍要避免尖括號）", () => {
+    const all = []; STEPS.forEach((st) => { const P = EXC.steps[st.id]; all.push(P.goal, ...P.tips, P.unlock.text); Object.values(P.finds).forEach((l) => l.forEach((e) => all.push(e.text))); P.recipes.forEach((r) => all.push(r.text)); });
+    Object.values(EXC.items).forEach((i) => all.push(i.name)); all.forEach((t) => ok(!/[<>]/.test(t), "含尖括號：" + t));
   });
 
   /* ---------- 執行與顯示 ---------- */
@@ -5898,7 +6177,7 @@ const StageCSS = (() => {
   }
   function bindInput(R) {
     const st = { down: false, moved: false, x: 0, y: 0, tgt: null };
-    R.root.style.touchAction = "none";
+    R.root.style.touchAction = (window.matchMedia && window.matchMedia("(pointer:coarse)").matches) ? "pan-y" : "none";
     R.root.addEventListener("contextmenu", (e) => e.preventDefault());
     R.root.addEventListener("pointerdown", (e) => { st.down = true; st.moved = false; st.x = e.clientX; st.y = e.clientY; st.tgt = e.target; R.target = null; if (R.raf) { cancelAnimationFrame(R.raf); R.raf = 0; } });
     R.root.addEventListener("pointermove", (e) => {
@@ -6424,7 +6703,7 @@ const StageGL = (() => {
   const visDeep = (o) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
   function bindInput(R) {
     const st = { down: false, moved: false, x: 0, y: 0 }; const ray = new T.Raycaster(); const v2 = new T.Vector2();
-    R.root.style.touchAction = "none"; R.root.addEventListener("contextmenu", (e) => e.preventDefault());
+    R.root.style.touchAction = (window.matchMedia && window.matchMedia("(pointer:coarse)").matches) ? "pan-y" : "none"; R.root.addEventListener("contextmenu", (e) => e.preventDefault());
     R.root.addEventListener("pointerdown", (e) => { st.down = true; st.moved = false; st.x = e.clientX; st.y = e.clientY; R.target = null; if (R.raf) { cancelAnimationFrame(R.raf); R.raf = 0; } });
     R.root.addEventListener("pointermove", (e) => {
       if (!st.down) return; const dx = e.clientX - st.x, dy = e.clientY - st.y;
@@ -6694,6 +6973,14 @@ const Stage = (() => {
   let msgs = {}, picked = {}, learn = null, anim = null, focusQ = null, hintPhaseKey = "", R = null, linkMsg = null, idleTimer = 0, stageHost = null;
   const persist = () => store.set(L.serialize(state));
 
+  /* ---------- 探索機關狀態（網址加 ?explore=0 可關閉，回到直接答題）---------- */
+  if (/[?&]explore=0(&|$)/.test(location.search)) CONFIG.explore.enabled = false;
+  const EX = Explore, exStore = L.makeStore(ls, C.storageKey + ((C.explore && C.explore.storageKeySuffix) || "-x"));
+  let ex = EX.restore(exStore.get()), selItem = null, exMsg = "", exBox = null;
+  const persistEx = () => exStore.set(EX.serialize(ex));
+  const curStepId = () => STEPS[Math.min(state.step, STEPS.length - 1)].id;
+  const exLocked = () => state.phase === "play" && EX.enabled() && !EX.isUnlocked(ex, curStepId());
+
   /* ---------- 聲音：第一次點擊後才出聲 ---------- */
   const Snd = {
     ctx: null, on: false,
@@ -6747,7 +7034,8 @@ const Stage = (() => {
         el("button", { class: "btn ghost small", "aria-label": "放大", onclick: () => Stage.zoom(R, 1.2) }, "＋"),
         el("button", { class: "btn ghost small", "aria-label": "縮小", onclick: () => Stage.zoom(R, 1 / 1.2) }, "－"),
         el("button", { class: "btn ghost small", id: "btnQual", title: "3D 畫面畫質：卡頓時改成「低」或「簡易」", onclick: (e) => { e.currentTarget.textContent = Stage.cycleMode(R); } }, "畫質"));
-      stageHost.append(root, tools, el("p", { class: "sub stagehint" }, "拖曳可以旋轉；點物件可以選取。"));
+      exBox = el("div", { class: "explore hidden", id: "explore" });
+      stageHost.append(root, tools, el("p", { class: "sub stagehint" }, "拖曳可以旋轉；點物件可以選取。"), exBox);
       R = Stage.create(root); R.onPick = onPickObj; { const qb = tools.querySelector("#btnQual"); qb.textContent = Stage.label(R); R.onMode = () => { qb.textContent = Stage.label(R); }; }
       Stage.focus(R, camKey(), true);
     }
@@ -6755,11 +7043,67 @@ const Stage = (() => {
   }
   function onPickObj(obj) {
     if (state.phase !== "play" || anim) return;
+    if (exLocked()) { onSpot(obj); return; }
     const q = pickQuestion();
     if (q && C.questions[q].pick.objs.includes(obj)) { answer(q, obj); return; }
     toast("這是「" + C.objects[obj].name + "」", "info");
   }
   const pickQuestion = () => { const qs = STEPS[state.step].qs; const f = focusQ && qs.includes(focusQ) && !state.done[focusQ] ? focusQ : qs.find((q) => !state.done[q]); return f && C.questions[f].kind === "pick" ? f : null; };
+
+  /* ---------- 探索機關：道具欄、工作檯架子、線索本 ---------- */
+  const XC = () => C.explore;
+  function setExMsg(t, kind) { exMsg = { text: t || "", kind: kind || "" }; const m = $("#exmsg"); if (m) { m.textContent = exMsg.text; m.className = "msg exmsg " + exMsg.kind; } }
+  function onSpot(spot) {
+    if (!exLocked() || anim) return false; Snd.click();
+    const id = curStepId();
+    if (selItem) {
+      const r = EX.useItem(ex, id, selItem, spot); ex = r.s; selItem = null; persistEx();
+      if (r.fb.kind === "unlock") { Snd.good(); buzz(60); toast("🔓 機關解開了！", "good"); exMsg = { text: r.fb.text, kind: "good" }; focusQ = null; render(); Stage.focus(R, camKey()); return true; }
+      Snd.bad(); setExMsg(r.fb.text, "bad"); renderExplore(); return true;
+    }
+    const r = EX.tapSpot(ex, id, spot); ex = r.s; persistEx();
+    if (r.fb.kind === "give") { Snd.good(); buzz(40); setExMsg("找到「" + EX.itemName(r.fb.item) + "」！" + r.fb.text, "good"); } else setExMsg(r.fb.text, "info");
+    renderExplore(); return true;
+  }
+  function onItem(item) {
+    if (!exLocked() || anim) return; Snd.click();
+    if (!selItem) { selItem = item; setExMsg(XC().msg.select.replace("{n}", EX.itemName(item)), "info"); renderExplore(); return; }
+    if (selItem === item) { selItem = null; setExMsg("", ""); renderExplore(); return; }
+    const r = EX.combine(ex, curStepId(), selItem, item); selItem = null;
+    if (r.fb.kind === "made") { ex = r.s; persistEx(); Snd.good(); buzz(40); setExMsg("做出了「" + EX.itemName(r.fb.item) + "」！" + r.fb.text, "good"); }
+    else { Snd.bad(); setExMsg(r.fb.text, "bad"); }
+    renderExplore();
+  }
+  function onExHint() {
+    Snd.click(); const r = EX.hint(ex, curStepId()); ex = r.s; persistEx();
+    setExMsg("💡 提示 " + r.level + "/" + (EX.puzzleOf(curStepId()).tips.length) + "：" + r.text, "hint"); renderExplore();
+  }
+  function renderExplore() {
+    if (!exBox) return;
+    const show = exLocked(); exBox.classList.toggle("hidden", !show); if (!show) { exBox.replaceChildren(); try { Stage.setPickable(R, false); } catch (e) { /* 忽略 */ } return; }
+    const P = EX.puzzleOf(curStepId()), X = XC();
+    const inv = ex.inv.length
+      ? ex.inv.map((id) => { const it = X.items[id]; return el("button", { class: "tile item" + (selItem === id ? " sel" : ""), "aria-pressed": selItem === id ? "true" : "false", "data-item": id, onclick: () => onItem(id) },
+          el("span", { class: "ic" }, it.icon), el("span", { class: "nm" }, it.name)); })
+      : [el("span", { class: "emptyinv" }, "道具欄是空的：到下面的架子或場景裡點點看")];
+    const shelf = Object.keys(X.spots).filter((k) => X.spots[k].kind === "shelf").map((k) =>
+      el("button", { class: "tile spot", "data-spot": k, onclick: () => onSpot(k) }, el("span", { class: "ic" }, X.spots[k].icon), el("span", { class: "nm" }, X.spots[k].name)));
+    const notes = ex.notes.length ? ex.notes.map((n) => el("li", {}, n.text)) : [el("li", {}, "還沒有線索。")];
+    const lv = ex.hintLv[curStepId()] || 0;
+    exBox.replaceChildren(
+      el("div", { class: "exgoal" }, "🎯 ", P.goal),
+      el("div", { class: "exlabel" }, "🎒 道具欄", selItem ? el("span", { class: "selnote" }, "　已選「" + EX.itemName(selItem) + "」→ 點場景或另一個道具") : null),
+      el("div", { class: "exrow inv" }, inv),
+      el("div", { class: "exlabel" }, "🔎 工作檯邊（點一下搜尋；也可以直接點上面的 3D 機器）"),
+      el("div", { class: "exrow shelf" }, shelf),
+      el("div", { class: "msg exmsg " + (exMsg && exMsg.kind || ""), id: "exmsg", role: "status", "aria-live": "polite" }, exMsg && exMsg.text || ""),
+      el("div", { class: "row exbtns" },
+        el("button", { class: "btn ghost small", id: "exhint", onclick: onExHint }, "💡 卡關了？（" + lv + "/" + P.tips.length + "）"),
+        selItem ? el("button", { class: "btn ghost small", onclick: () => { selItem = null; setExMsg("", ""); renderExplore(); } }, "取消選取") : null),
+      el("details", { class: "exnotes" }, el("summary", {}, "📒 線索本（" + ex.notes.length + "）"), el("ul", {}, notes)));
+    try { Stage.setPickable(R, true); } catch (e) { /* 忽略 */ }
+  }
+  const lockedCard = () => { const P = EX.puzzleOf(curStepId()); return el("div", { class: "qcard lockedq" }, el("h3", {}, "🔒 題目還沒打開"), el("p", { class: "prompt" }, "先完成場景裡的機關：" + P.goal), para(XC().msg.locked, "sub")); };
 
   /* ---------- 動畫 ---------- */
   function playAnim(key, onDone) {
@@ -6775,7 +7119,7 @@ const Stage = (() => {
     h.raf = requestAnimationFrame(frame);
   }
   function afterAnim() {
-    anim = null; const fb = dispatch({ type: "animEnd" }, true);
+    anim = null; const fb = dispatch({ type: "animEnd" }, true); ex = EX.advance(ex); selItem = null; exMsg = ""; persistEx();
     if (state.phase === "done") { Snd.good(); }
     focusQ = null; hintPhaseKey = ""; hideHint(); render(); Stage.focus(R, camKey());
     sceneNow(0); void fb;
@@ -6854,6 +7198,7 @@ const Stage = (() => {
     right.push(el("h2", {}, st.title));
     { const im = artImg("s2_step_" + st.id, "banner", st.title); if (im) right.push(im); }
     if (learn && !anim) right.push(el("div", { class: "note-box learn" }, el("b", {}, "💡 上一步學到的："), learn.text));
+    if (exLocked()) { right.push(lockedCard()); return el("div", { class: "panel grid2 pop" }, el("div", { class: "stickycol" }, ensureStage()), el("div", {}, right)); }
     if (st.gate) {
       right.push(para("三項都要檢查，三項都通過才能開始列印。（可以點卡片切換，也可以直接點 3D 場景裡的物件。）", "sub"));
       st.qs.forEach((q) => right.push(questionCard(q, { active: q === fq && !state.done[q] })));
@@ -6895,7 +7240,7 @@ const Stage = (() => {
     $("#chips").replaceChildren(...STEPS.map((s, i) => el("span", { class: "chip" + (i === cur ? " on" : (i < cur ? " fin" : "")) }, (i < cur ? "✓ " : (i + 1) + " ") + s.short)));
     $("#grp").textContent = "第 " + state.group + " 組"; $("#donebadge").classList.toggle("hidden", !state.completed);
     const hb = $("#hintbtn"); const hq = state.phase === "play" ? (STEPS[state.step].gate ? (focusQ && !state.done[focusQ] ? focusQ : firstOpenQ()) : STEPS[state.step].qs[0]) : null;
-    const show = hq && !state.done[hq]; hb.classList.toggle("hidden", !show); if (show) hb.textContent = "💡 提示（已看 " + state.hintSeen[hq] + "/3 層）";
+    const show = hq && !state.done[hq] && !exLocked(); hb.classList.toggle("hidden", !show); if (show) hb.textContent = "💡 提示（已看 " + state.hintSeen[hq] + "/3 層）";
     $("#info").textContent = "第 " + state.group + " 組 · 答錯 " + state.failCount + " 次 · 提示 " + state.hintsUsed + " 次";
     const lock = $("#lock"); const showLock = state.locked && !anim && !state.animating; lock.classList.toggle("hidden", !showLock);
     if (showLock) $("#lockmsg").textContent = C.msg.lock.replace("{n}", C.timing.lockAfter);
@@ -6913,7 +7258,7 @@ const Stage = (() => {
     if (keep) keep.removeChild(stageHost);
     main.classList.remove("busyview"); main.replaceChildren(view());
     if (state.phase === "play" && !$("#cdline")) { /* 冷卻提示列放在面板最上面 */ const p = $("#main .panel"); if (p) p.prepend(el("div", { id: "cdline", class: "cdline", role: "status" })); }
-    sceneNow(0); chrome();
+    renderExplore(); sceneNow(0); chrome();
     const k = state.phase + ":" + state.step + ":" + (focusQ || ""); if (k !== hintPhaseKey) { hintPhaseKey = k; hideHint(); }
   }
 
@@ -6965,11 +7310,12 @@ const Stage = (() => {
     const doUnlock = () => { const fb = dispatch({ type: "unlock", pin }, true); if (fb.ok) { toast("已解鎖，可以繼續", "good"); closeOverlay(); render(); } };
     const doReset = () => {
       const fb = dispatch({ type: "reset", pin, group: g, seed: newSeed() }, true);
-      if (fb.ok) { store.del(); persist(); msgs = {}; picked = {}; learn = null; anim = null; focusQ = null; linkMsg = null; hintPhaseKey = ""; closeOverlay(); hideHint(); render(); Stage.focus(R, camKey(), true); toast("已重來，換第 " + state.group + " 組、題庫 " + CONFIG.banks[state.bank].label, "good"); }
+      if (fb.ok) { store.del(); persist(); ex = EX.fresh(); selItem = null; exMsg = ""; exStore.del(); persistEx(); msgs = {}; picked = {}; learn = null; anim = null; focusQ = null; linkMsg = null; hintPhaseKey = ""; closeOverlay(); hideHint(); render(); Stage.focus(R, camKey(), true); toast("已重來，換第 " + state.group + " 組、題庫 " + CONFIG.banks[state.bank].label, "good"); }
     };
     o.replaceChildren(el("div", { class: "box" }, el("h2", {}, "關主面板"),
       el("p", { class: "sub" }, "目前：第 " + state.group + " 組 · 題庫 " + CONFIG.banks[state.bank].label + " · 答錯 " + state.failCount + " 次 · 提示 " + state.hintsUsed + " 次" + (state.locked ? " · 已鎖機" : "") + (state.completed ? " · 已完成" : "")),
       state.locked ? el("button", { class: "btn big green", onclick: doUnlock }, "解鎖機器（讓這組繼續）") : null,
+      exLocked() ? el("button", { class: "btn big", style: "margin-top:8px", onclick: () => { ex = EX.skip(ex, curStepId()); persistEx(); toast("已略過這一步的機關", "good"); closeOverlay(); render(); } }, "略過這一步的機關（直接開放題目）") : null,
       el("hr", { style: "border-color:var(--line);margin:14px 0" }),
       el("b", {}, "重來，並換到下一組"), el("div", { class: "stepper" }, el("button", { onclick: () => step(-1) }, "−"), out, el("button", { onclick: () => step(1) }, "＋")), codeLine,
       el("button", { class: "btn big", style: "margin-top:8px", onclick: doReset }, "重來（全部清空）"),

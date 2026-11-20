@@ -414,6 +414,10 @@ input[type=range]::-moz-range-thumb{width:44px;height:44px}
 @media (prefers-reduced-motion:no-preference){.artimg{animation:artin .35s ease-out}}@keyframes artin{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
 .artimg.stamp{display:inline-block;height:46px;width:auto;margin:0 8px 0 0;vertical-align:middle}.artimg.badge{display:inline-block;height:40px;width:40px;margin:0 8px 0 0;vertical-align:middle}header.top>.artimg.badge{margin:0}
 
+
+/* ===== 手機優化（觸控裝置）===== */
+@media (pointer:coarse){button,.btn,[role=button],summary{min-height:44px}input[type=checkbox],input[type=radio]{min-width:24px;min-height:24px}}
+@media (max-width:640px){body{padding-left:max(0px,env(safe-area-inset-left));padding-right:max(0px,env(safe-area-inset-right))}}
 </style>
 </head>
 <body>
