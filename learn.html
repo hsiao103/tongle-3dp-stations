@@ -338,9 +338,9 @@ ol.steps b.n{color:var(--navy);font-size:17px}
         <button class="sec" id="w-copy">📋 複製描述詞</button>
         <div class="box"><b>精準描述詞的 6 個要素</b>：主體（誰）、動作、風格、視角、背景、限制。<br>要轉成 3D，圖要這樣畫：<b>只有一個主體、背景單純、輪廓清楚、全身完整入鏡、避免像頭髮絲一樣細的東西</b>。AI 只看一張圖時，看不到的背面會用猜的。</div>
         ${ck("s2a", "我的描述詞包含：主體、動作、風格、視角、背景、限制")}${ck("s2", "我生成並下載了足球公仔的 2D 圖")}</li>
-      <li><b class="n">開通 Tripo（老師協助）</b>（約 5 分鐘）<br>用縣府的教育版 Gmail 登入 tripo3d.ai。<div class="hint">請老師先決定要用哪個帳號：免費方案的作品可能是公開的，付費方案才能設成不公開、也才能輸出。</div>
+      <li><b class="n">開通 Tripo（老師協助）</b>（約 5 分鐘）<br>用縣府的教育版 Gmail 登入 tripo3d.ai，或由老師用學校公用帳號操作。<div class="hint">請老師先決定要用哪個帳號：免費方案的作品可能是公開的，付費方案才能設成不公開、也才能輸出。公用帳號的密碼由老師保管，不要告訴別人。</div>
         ${ck("s3", "我登入成功了（或老師已幫我開通）")}</li>
-      <li><b class="n">匯入 2D 圖，生成 3D</b>（約 12 分鐘）<br>把<b>足球公仔的 2D 圖</b>（不是你的照片！）匯入 Tripo，可以加提示詞，也可以不加，然後生成。
+      <li><b class="n">匯入 2D 圖，生成 3D</b>（約 12 分鐘）<br>把<b>足球公仔的 2D 圖</b>匯入 Tripo，可以加提示詞，也可以不加，然後生成。<div class="hint" style="color:#c2410c;font-weight:700">⚠️ 只有「足球公仔圖」可以上傳 Tripo。你的照片、有臉的頭像都不能上傳。</div>
         <label class="f" for="w-tp">我加的提示詞（沒有加就空白）</label><input type="text" id="w-tp" maxlength="100" value="${esc(w.tp || "")}">
         <div class="box">生成後把模型轉一圈，檢查：<b>腳底站得穩嗎？哪裡懸空？哪裡太細？</b>想一想，如果要印出來，哪裡需要支撐？</div>
         ${ck("s4a", "我匯入的是 2D 圖，不是真實照片")}${ck("s4", "我生成了 3D，並檢查過懸空處")}</li>
