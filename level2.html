@@ -863,6 +863,31 @@ input[type=text]{min-height:52px;font-size:22px;padding:6px 12px;border-radius:1
   #app{padding-bottom:70px}.top{position:static}
 }
 
+/* ===== 解謎導引：任務流程、場景標籤 ===== */
+.stagewrap{position:relative}
+.pinbox{position:absolute;left:0;right:0;top:0;pointer-events:none;height:0;z-index:5}
+.pin{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;display:flex;align-items:center;gap:4px;min-height:44px;padding:4px 10px 4px 6px;border-radius:999px;border:2px solid #fff;background:rgba(14,28,52,.92);color:#fff;font-size:14px;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.5);white-space:nowrap}
+.pin::after{content:"";position:absolute;left:50%;bottom:-9px;transform:translateX(-50%);border:6px solid transparent;border-top-color:#fff}
+.pin .pic{font-size:22px;line-height:1}
+.pin.fresh{border-color:var(--amber);animation:pinbob 1.1s ease-in-out infinite}
+.pin.target{border-color:var(--green);background:rgba(57,255,136,.25);animation:pinbob .8s ease-in-out infinite}
+@keyframes pinbob{0%,100%{margin-top:0}50%{margin-top:-6px}}
+.mission{display:grid;gap:6px}
+.mrow{display:flex;gap:8px;align-items:center;padding:6px 8px;border-radius:12px;border:2px solid var(--line);background:#0e1c34;opacity:.7}
+.mrow.cur{opacity:1;border-color:var(--amber);background:rgba(255,210,77,.1)}
+.mrow.done{opacity:.55}
+.mrow .mno{flex:0 0 28px;height:28px;border-radius:50%;background:var(--line);display:flex;align-items:center;justify-content:center;font-weight:900}
+.mrow.cur .mno{background:var(--amber);color:#1a1a1a}.mrow.done .mno{background:var(--green);color:#06210f}
+.mrow>div{display:flex;flex-wrap:wrap;gap:4px 5px;align-items:center;font-size:14px}
+.mchip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-weight:700;border:2px solid var(--line)}
+.mchip b{font-size:18px}
+.mchip.spotc{border-color:#ffd24d}.mchip.itemc{border-color:#4aa3ff}.mchip.unk{opacity:.7;border-style:dashed}.mchip.lockc{border-color:var(--green)}
+.marrow{opacity:.85;font-weight:800}
+.tile.target{border-color:var(--green);background:rgba(57,255,136,.18);animation:pinbob .8s ease-in-out infinite}
+.tile.partner{border-color:var(--green);box-shadow:0 0 0 3px rgba(57,255,136,.5) inset}
+.tile .tag{font-size:11px;color:var(--green);font-weight:800}
+.selnote2{opacity:.7;font-weight:600;color:#fff}
+
 </style>
 </head>
 <body>
@@ -7034,8 +7059,8 @@ const Stage = (() => {
         el("button", { class: "btn ghost small", "aria-label": "放大", onclick: () => Stage.zoom(R, 1.2) }, "＋"),
         el("button", { class: "btn ghost small", "aria-label": "縮小", onclick: () => Stage.zoom(R, 1 / 1.2) }, "－"),
         el("button", { class: "btn ghost small", id: "btnQual", title: "3D 畫面畫質：卡頓時改成「低」或「簡易」", onclick: (e) => { e.currentTarget.textContent = Stage.cycleMode(R); } }, "畫質"));
-      exBox = el("div", { class: "explore hidden", id: "explore" });
-      stageHost.append(root, tools, el("p", { class: "sub stagehint" }, "拖曳可以旋轉；點物件可以選取。"), exBox);
+      exBox = el("div", { class: "explore hidden", id: "explore" }); pinBox = el("div", { class: "pinbox" });
+      stageHost.append(root, pinBox, tools, el("p", { class: "sub stagehint" }, "拖曳可以旋轉；點物件可以選取。"), exBox);
       R = Stage.create(root); R.onPick = onPickObj; { const qb = tools.querySelector("#btnQual"); qb.textContent = Stage.label(R); R.onMode = () => { qb.textContent = Stage.label(R); }; }
       Stage.focus(R, camKey(), true);
     }
@@ -7078,32 +7103,77 @@ const Stage = (() => {
     Snd.click(); const r = EX.hint(ex, curStepId()); ex = r.s; persistEx();
     setExMsg("💡 提示 " + r.level + "/" + (EX.puzzleOf(curStepId()).tips.length) + "：" + r.text, "hint"); renderExplore();
   }
+  /* 這一步會用到的地方（3D 物件、架子）＝找東西的地方＋要使用道具的地方 */
+  const relSpots = (P) => { const o = {}; Object.keys(P.finds).forEach((k) => (o[k] = 1)); o[P.unlock.on] = 1; return Object.keys(o); };
+  const known = (id) => ex.inv.indexOf(id) >= 0 || ex.notes.some((n) => n.item === id);
+  const chipSpot = (k) => el("span", { class: "mchip spotc" }, el("b", {}, XC().spots[k].icon), XC().spots[k].name);
+  const chipItem = (id) => known(id) ? el("span", { class: "mchip itemc" }, el("b", {}, XC().items[id].icon), XC().items[id].name) : el("span", { class: "mchip unk" }, el("b", {}, "❓"), "？");
+  const arrow = (t) => el("span", { class: "marrow" }, t || "→");
+  function missionRows(P) {
+    const rows = [];
+    Object.keys(P.finds).forEach((k) => { const outs = P.finds[k].map((e) => e.give); const done = outs.every((g) => known(g));
+      rows.push({ done, kind: "找", node: el("div", {}, chipSpot(k), arrow("點一下 →"), ...outs.map(chipItem)) }); });
+    P.recipes.forEach((r) => rows.push({ done: known(r.out) && !ex.inv.includes(r.a) , kind: "合", out: r.out, node: el("div", {}, chipItem(r.a), arrow("＋"), chipItem(r.b), arrow(r.ordered ? "（有順序）→" : "→"), chipItem(r.out)) }));
+    const u = P.unlock; rows.push({ done: false, kind: "用", node: el("div", {}, chipItem(u.item), arrow("選它，再點 →"), chipSpot(u.on), el("span", { class: "mchip lockc" }, el("b", {}, "🔓"), "題目打開")) });
+    let cur = rows.findIndex((r) => !r.done); if (cur < 0) cur = rows.length - 1;
+    return rows.map((r, i) => el("div", { class: "mrow" + (r.done ? " done" : "") + (i === cur ? " cur" : "") },
+      el("span", { class: "mno" }, r.done ? "✓" : String(i + 1)), r.node));
+  }
+  /* 3D 場景上的標籤：跟著物件移動，點標籤＝點物件 */
+  let pinBox = null, pinRaf = 0;
+  function targetsOf(P) {
+    const t = { spots: {}, items: {} };
+    if (selItem) { if (selItem === P.unlock.item) t.spots[P.unlock.on] = 1; P.recipes.forEach((r) => { if (r.a === selItem) t.items[r.b] = 1; if (r.b === selItem && !r.ordered) t.items[r.a] = 1; }); }
+    return t;
+  }
+  function pinLoop() {
+    pinRaf = 0; if (!pinBox || !exLocked()) { if (pinBox) pinBox.replaceChildren(); return; }
+    const W = Stage.current; const root = W && W.R && W.R.root;
+    if (root) { const w = root.clientWidth, h = root.clientHeight;
+      pinBox.querySelectorAll("[data-pin]").forEach((b) => { let q = null; try { q = Stage.screenPos(W, b.dataset.pin); } catch (e) { /* 忽略 */ }
+        if (!q || !isFinite(q.x) || !isFinite(q.y)) { b.style.visibility = "hidden"; return; }
+        const x = Math.max(8, Math.min(w - 8, q.x)), y = Math.max(22, Math.min(h - 22, q.y)); b.style.visibility = "visible"; b.style.left = x + "px"; b.style.top = y + "px"; }); }
+    pinRaf = requestAnimationFrame(pinLoop);
+  }
+  function renderPins(P) {
+    if (!pinBox) return; const X = XC(), t = targetsOf(P), id = curStepId();
+    const fresh = (k) => (P.finds[k] || []).some((e, i) => i >= (ex.given[id + ":" + k] || 0) && !(e.ifMissing && ex.inv.includes(e.give)));
+    pinBox.replaceChildren(...relSpots(P).filter((k) => X.spots[k].kind === "3d").map((k) =>
+      el("button", { class: "pin" + (t.spots[k] ? " target" : "") + (!selItem && fresh(k) ? " fresh" : ""), "data-pin": k, "aria-label": X.spots[k].name, onclick: () => onSpot(k) },
+        el("span", { class: "pic" }, X.spots[k].icon), el("span", { class: "pnm" }, t.spots[k] ? "用在這裡" : X.spots[k].name))));
+    if (!pinRaf) pinRaf = requestAnimationFrame(pinLoop);
+  }
   function renderExplore() {
     if (!exBox) return;
-    const show = exLocked(); exBox.classList.toggle("hidden", !show); if (!show) { exBox.replaceChildren(); try { Stage.setPickable(R, false); } catch (e) { /* 忽略 */ } return; }
-    const P = EX.puzzleOf(curStepId()), X = XC();
+    const show = exLocked(); exBox.classList.toggle("hidden", !show);
+    if (!show) { exBox.replaceChildren(); if (pinBox) pinBox.replaceChildren(); try { Stage.setPickable(R, false); } catch (e) { /* 忽略 */ } return; }
+    const P = EX.puzzleOf(curStepId()), X = XC(), t = targetsOf(P);
     const inv = ex.inv.length
-      ? ex.inv.map((id) => { const it = X.items[id]; return el("button", { class: "tile item" + (selItem === id ? " sel" : ""), "aria-pressed": selItem === id ? "true" : "false", "data-item": id, onclick: () => onItem(id) },
-          el("span", { class: "ic" }, it.icon), el("span", { class: "nm" }, it.name)); })
-      : [el("span", { class: "emptyinv" }, "道具欄是空的：到下面的架子或場景裡點點看")];
-    const shelf = Object.keys(X.spots).filter((k) => X.spots[k].kind === "shelf").map((k) =>
-      el("button", { class: "tile spot", "data-spot": k, onclick: () => onSpot(k) }, el("span", { class: "ic" }, X.spots[k].icon), el("span", { class: "nm" }, X.spots[k].name)));
+      ? ex.inv.map((id) => { const it = X.items[id]; return el("button", { class: "tile item" + (selItem === id ? " sel" : "") + (t.items[id] ? " partner" : ""), "aria-pressed": selItem === id ? "true" : "false", "data-item": id, onclick: () => onItem(id) },
+          el("span", { class: "ic" }, it.icon), el("span", { class: "nm" }, it.name), t.items[id] ? el("span", { class: "tag" }, "可以合在一起") : null); })
+      : [el("span", { class: "emptyinv" }, "還是空的。先點場景上跳動的標籤，或下面的架子。")];
+    const shelf = relSpots(P).filter((k) => X.spots[k].kind === "shelf").map((k) =>
+      el("button", { class: "tile spot" + (t.spots[k] ? " target" : ""), "data-spot": k, onclick: () => onSpot(k) },
+        el("span", { class: "ic" }, X.spots[k].icon), el("span", { class: "nm" }, t.spots[k] ? "用在這裡" : X.spots[k].name)));
     const notes = ex.notes.length ? ex.notes.map((n) => el("li", {}, n.text)) : [el("li", {}, "還沒有線索。")];
     const lv = ex.hintLv[curStepId()] || 0;
     exBox.replaceChildren(
       el("div", { class: "exgoal" }, "🎯 ", P.goal),
-      el("div", { class: "exlabel" }, "🎒 道具欄", selItem ? el("span", { class: "selnote" }, "　已選「" + EX.itemName(selItem) + "」→ 點場景或另一個道具") : null),
+      el("div", { class: "exlabel" }, "📍 這一步的任務流程（跟著做就能打開題目）"),
+      el("div", { class: "mission" }, missionRows(P)),
+      el("div", { class: "exlabel" }, "🎒 道具欄", selItem ? el("span", { class: "selnote" }, "　已選「" + EX.itemName(selItem) + "」→ 點發亮的地方或道具") : el("span", { class: "selnote2" }, "　（點一個道具選取它）")),
       el("div", { class: "exrow inv" }, inv),
-      el("div", { class: "exlabel" }, "🔎 工作檯邊（點一下搜尋；也可以直接點上面的 3D 機器）"),
-      el("div", { class: "exrow shelf" }, shelf),
+      shelf.length ? el("div", { class: "exlabel" }, "🧰 工作檯邊（3D 場景上的標籤也可以點）") : el("div", { class: "exlabel" }, "👆 到上面 3D 場景，點跳動的標籤"),
+      shelf.length ? el("div", { class: "exrow shelf" }, shelf) : null,
       el("div", { class: "msg exmsg " + (exMsg && exMsg.kind || ""), id: "exmsg", role: "status", "aria-live": "polite" }, exMsg && exMsg.text || ""),
       el("div", { class: "row exbtns" },
         el("button", { class: "btn ghost small", id: "exhint", onclick: onExHint }, "💡 卡關了？（" + lv + "/" + P.tips.length + "）"),
         selItem ? el("button", { class: "btn ghost small", onclick: () => { selItem = null; setExMsg("", ""); renderExplore(); } }, "取消選取") : null),
       el("details", { class: "exnotes" }, el("summary", {}, "📒 線索本（" + ex.notes.length + "）"), el("ul", {}, notes)));
+    renderPins(P);
     try { Stage.setPickable(R, true); } catch (e) { /* 忽略 */ }
   }
-  const lockedCard = () => { const P = EX.puzzleOf(curStepId()); return el("div", { class: "qcard lockedq" }, el("h3", {}, "🔒 題目還沒打開"), el("p", { class: "prompt" }, "先完成場景裡的機關：" + P.goal), para(XC().msg.locked, "sub")); };
+  const lockedCard = () => el("div", { class: "qcard lockedq" }, el("h3", {}, "🔒 題目還沒打開"), para("跟著上面的「任務流程」做，做完題目就會出現在這裡。", "sub"));
 
   /* ---------- 動畫 ---------- */
   function playAnim(key, onDone) {
