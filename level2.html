@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>3D 列印模擬台・第二關</title>
+<title>3DP同樂製造・第二關</title>
 <script id="config">
 /* =====================================================================
    CONFIG：老師只要改這裡就能換內容，不用動程式
@@ -16,7 +16,7 @@ const FILA = { remainG: 18, needG: 32 };                        // 教學用設�
 const PLATE = { gaps: { lf: 0.10, rf: 0.10, lb: 0.11, rb: 0.10 }, tol: 0.05, seated: false }; // 教學用設定值：紙張法量到的四角間隙(mm，已調平、差距在容許內)、可接受的差距；seated＝磁吸板是否確實吸附到位（false＝沒吸好）
 
 const CONFIG = {
-  title: "3D 列印模擬台",
+  title: "3DP同樂製造",
   subtitle: "第二關・運作流程",
   art: { enabled: true, pei: "black" }, /* 插圖：false 就全部改回程式畫的版本 */
   stage: { mode: "auto" }, /* 3D 畫面：auto＝自動挑畫質（太慢會自動降級）；low／mid／high＝固定畫質；css＝簡易版（舊平板或不支援 WebGL 時用）。也可用網址 ?stage=css */
