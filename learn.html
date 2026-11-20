@@ -302,6 +302,7 @@ ol.steps b.n{color:var(--navy);font-size:17px}
     ["Bambu Studio 快速上手教程（官方 Wiki）", "https://wiki.bambulab.com/zh/studio-handy", "工具列、快捷鍵、切片資訊、列印選項都有說明"],
     ["Bambu Handy 快速入門（官方 Wiki）", "https://wiki.bambulab.com/zh/studio-handy/handy/bambu-handy-quick-start", "手機 App 的綁定與使用"],
     ["局域網模式（官方 Wiki）", "https://wiki.bambulab.com/zh/knowledge-sharing/enable-lan-mode", "給老師：不連雲端、只在校內網路使用印表機"],
+    ["MakerWorld 模型社群", "https://makerworld.com/zh", "找現成的模型來練習匯入、擺放、支撐、預覽（是否要登入才能下載，請老師先試過）"],
     ["Tinkercad（免費的瀏覽器 3D 設計）", "https://www.tinkercad.com", "想自己從零設計模型，可以在這裡練習"]
   ];
   function renderS3() {
@@ -327,14 +328,28 @@ ol.steps b.n{color:var(--navy);font-size:17px}
       <li><b class="n">看官方 Wiki</b>　下面的連結都是公開網頁，直接打開就能讀。</li>
       <li><b class="n">看老師示範</b>　老師會用教室電腦帶你做一次四個動作。</li>
       <li><b class="n">用這份學習單練習觀念</b>　懸空、底座、支撐，在紙上標出來，就是在練習判讀預覽畫面。</li>
+      <li><b class="n">到 MakerWorld 找現成模型</b>　拿來練習匯入、擺放、支撐、預覽。是否要登入才能下載，請先問老師。</li>
       <li><b class="n">用 Tinkercad 練習設計</b>　老師可以建立班級，不需要學生的電子郵件。</li>
     </ol>
     <p class="hint">印表機是老師的帳號綁定，學生不需要登入，也不要輸入任何帳號密碼。</p>
-    <h3>學校的四台印表機</h3>
-    <table class="t"><tr><th>機型</th><th>一句話重點</th></tr>
-      <tr><td>A1 mini</td><td>（老師補充）</td></tr><tr><td>A1</td><td>（老師補充）</td></tr><tr><td>H2S</td><td>（老師補充）</td></tr>
-      <tr><td>X2D</td><td>雙噴頭，可以用另一個噴頭專門印支撐材料；列印範圍 256×256×260 mm</td></tr></table>
+    <div class="box warn">給老師：公開討論指出，Bambu Studio 不使用雲端功能時不一定要登入；但這不是官方說明，各版本也可能不同。請在教室電腦上實測一次再上課。</div>
+    <h3>學校的四台印表機：xyz 列印範圍大不同</h3>
+    <p>印表機一次能印出來的最大空間，用「長 × 寬 × 高」（x × y × z，單位 mm）表示。你的公仔放不放得進去，要先看這個。</p>
+    <table class="t"><tr><th>機型</th><th>x × y × z（mm）</th><th>一句話重點</th></tr>
+      <tr><td>A1 mini</td><td>180 × 180 × 180</td><td>範圍最小，適合手掌大小的作品</td></tr>
+      <tr><td>A1</td><td>256 × 256 × 256</td><td>範圍比 A1 mini 大很多，一般的公仔都放得下</td></tr>
+      <tr><td>H2S</td><td>340 × 320 × 340</td><td>四台裡範圍最大，可以印大件作品</td></tr>
+      <tr><td>X2D</td><td>256 × 256 × 260</td><td>雙噴頭，可以用另一個噴頭專門印支撐材料</td></tr></table>
+    <p class="hint">數值整理自公開資料，實際以機台與官方標示為準。</p>
+    <div class="card"><div class="k">我的公仔放得進哪一台？</div>
+      <div class="row" style="grid-template-columns:repeat(3,1fr)"><div><label class="f" for="sz-x">寬（mm）</label><input type="number" id="sz-x" min="1" max="999" value="${esc(c.sx || "")}"></div><div><label class="f" for="sz-y">深（mm）</label><input type="number" id="sz-y" min="1" max="999" value="${esc(c.sy || "")}"></div><div><label class="f" for="sz-z">高（mm）</label><input type="number" id="sz-z" min="1" max="999" value="${esc(c.sz || "")}"></div></div>
+      <div id="sz-out" style="font-weight:700;margin-top:8px"></div><div class="hint">想一想：如果只有 A1 mini 放得下，要怎麼把公仔縮小？縮小之後，哪個細節會太細？</div></div>
     <h3>資源連結</h3><div class="links">${LINKS.map((l) => `<a href="${l[1]}" target="_blank" rel="noopener">${esc(l[0])}<small>${esc(l[2])}</small></a>`).join("")}</div>`;
+    const PR = [["A1 mini", 180, 180, 180], ["A1", 256, 256, 256], ["H2S", 340, 320, 340], ["X2D", 256, 256, 260]];
+    const calc = () => { const x = +$("#sz-x").value, y = +$("#sz-y").value, z = +$("#sz-z").value; c.sx = $("#sz-x").value; c.sy = $("#sz-y").value; c.sz = $("#sz-z").value; save();
+      if (!(x > 0 && y > 0 && z > 0)) { $("#sz-out").textContent = "輸入寬、深、高，看看哪幾台放得下。"; return; }
+      const ok = PR.filter((p) => x <= p[1] && y <= p[2] && z <= p[3]).map((p) => p[0]); $("#sz-out").textContent = ok.length ? "放得下：" + ok.join("、") : "四台都放不下，要縮小或分成幾塊分開印。"; };
+    ["sz-x", "sz-y", "sz-z"].forEach((i) => $("#" + i).oninput = calc); calc();
     $$("[data-s3]", $("#t3")).forEach((x) => x.onchange = () => { c[x.dataset.s3] = x.checked; save(); });
     $("#s3-note").oninput = (e) => { c.note = e.target.value; save(); };
   }
