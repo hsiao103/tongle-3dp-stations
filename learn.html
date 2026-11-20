@@ -70,7 +70,7 @@ ol.steps b.n{color:var(--navy);font-size:17px}
 <div class="row"><div><label class="f" for="li-cls">班級</label><input type="text" id="li-cls" inputmode="numeric" maxlength="8" placeholder="例如 601"></div><div><label class="f" for="li-seat">座號</label><input type="number" id="li-seat" min="1" max="99" placeholder="例如 7"></div></div>
 <label class="f" for="li-name">姓名（可以不填）</label><input type="text" id="li-name" maxlength="12"><p id="li-err" role="alert" style="color:#c2410c;font-weight:700;min-height:1.5em"></p><button class="pri" id="li-go">開始</button></div>
 <div id="app" class="hide"><header class="top"><h1>3DP同樂製造・我的學習單<small>3DP工作平台學習・請依序挑戰</small></h1><span class="who" id="who"></span><button class="sec" id="chg" style="background:#13233f;color:#fff;border-color:#2c4673">換座號</button></header>
-<nav class="tabs" role="tablist"><button data-t="t0">任務卡</button><button data-t="t1">第1節 回顧三問</button><button data-t="t2">第2節 想像挑戰</button><button data-t="t3">第3節 軟體學習</button><button data-t="t4">作品卡</button></nav>
+<nav class="tabs" role="tablist"><button data-t="t0">任務卡</button><button data-t="t1">第1節 回顧三問</button><button data-t="t2">第2節 想像挑戰</button><button data-t="t3">第3節 AI 實作</button><button data-t="t4">作品卡</button></nav>
 <main><section class="pg" id="t0"></section><section class="pg" id="t1"></section><section class="pg" id="t2"></section><section class="pg" id="t3"></section><section class="pg" id="t4"></section></main></div>
 <script>/* 學習單引擎：同一個班級＋座號，永遠產生同一份題目；同班座號 1~320 之間組合不重複 */
 (function (g) {
@@ -179,8 +179,8 @@ ol.steps b.n{color:var(--navy);font-size:17px}
     $("#li-err").textContent = ""; ID = { cls, seat }; store.set("3dpl:id", ID); load(); S.name = name || S.name; save(); start();
   }
   function load() {
-    S = store.get(skey(), null) || { name: "", flipped: false, tries: {}, solved: {}, draw: "", f: {}, peer: {}, self: {}, fix: {}, s3: {} };
-    ["tries", "solved", "f", "peer", "self", "fix", "s3"].forEach((k) => { if (!S[k]) S[k] = {}; });
+    S = store.get(skey(), null) || { name: "", flipped: false, tries: {}, solved: {}, draw: "", f: {}, peer: {}, self: {}, fix: {}, s3: {}, w: {} };
+    ["tries", "solved", "f", "peer", "self", "fix", "s3", "w"].forEach((k) => { if (!S[k]) S[k] = {}; });
     T = E.gen(ID.cls, ID.seat);
   }
 
@@ -305,10 +305,48 @@ ol.steps b.n{color:var(--navy);font-size:17px}
     ["MakerWorld 模型社群", "https://makerworld.com/zh", "找現成的模型來練習匯入、擺放、支撐、預覽（是否要登入才能下載，請老師先試過）"],
     ["Tinkercad（免費的瀏覽器 3D 設計）", "https://www.tinkercad.com", "想自己從零設計模型，可以在這裡練習"]
   ];
+  const POSES = [
+    { id: "shoot", name: "射門", desc: "正在射門，一隻腳向後擺、另一隻腳站穩", hint: "往後擺的腳是「懸空處」，等一下要想底座和支撐。" },
+    { id: "keeper", name: "守門員撲救", desc: "守門員向前撲救，雙手向前伸", hint: "伸出去的手臂是「懸空處」，手臂要夠粗才不會斷。" },
+    { id: "header", name: "跳起頭球", desc: "跳起來用頭頂球，雙腳離地", hint: "整個人離地，需要底座或支撐柱，不然站不住。" },
+    { id: "dribble", name: "運球", desc: "一隻腳踩在足球上運球", hint: "球要連在腳上、重心比較穩，但球和腳的接觸處要想一想。" },
+    { id: "cheer", name: "進球慶祝", desc: "雙手高舉慶祝進球", hint: "高舉的手臂是「懸空處」，不要畫得太細。" }
+  ];
+  const STYLES = ["Q 版公仔", "扁平卡通插畫", "3D 玩具風"];
+  function buildPrompt(w) {
+    const po = POSES.find((x) => x.id === w.pose) || POSES[0];
+    return "請參考我上傳的頭像，畫一個" + (w.style || STYLES[0]) + "的足球公仔：臉部特徵和頭像相似，穿" + (w.color || "藍色") + "球衣，動作是" + po.desc + "。全身完整入鏡（腳不要被裁掉），" + (w.view || "正面") + "視角，只有一個主體，純白色背景，輪廓清楚，不要出現文字，不要太細的頭髮或飄帶" + (w.base !== false ? "，腳下加一個圓形底座" : "") + "。";
+  }
   function renderS3() {
-    const c = S.s3, ck = (k, t) => `<label class="chk"><input type="checkbox" data-s3="${k}" ${c[k] ? "checked" : ""}><span>${t}</span></label>`;
-    $("#t3").innerHTML = `<h2>第 3 節・軟體學習與資源連結</h2><span class="time">40 分鐘</span>
-    <p>前兩節你在紙上標出了懸空、支撐和底座。這一節，換成讓<b>切片軟體</b>幫你檢查。切片就是把模型「切」成一層層的路徑，再加入溫度、速度、支撐等設定，變成印表機看得懂的指令。</p>
+    const c = S.s3, w = S.w, ck = (k, t) => `<label class="chk"><input type="checkbox" data-s3="${k}" ${c[k] ? "checked" : ""}><span>${t}</span></label>`;
+    const po = POSES.find((x) => x.id === w.pose) || POSES[0];
+    if (!w.prompt) w.prompt = buildPrompt(w);
+    $("#t3").innerHTML = `<h2>第 3 節・AI 實作：從我的頭像到 3D 公仔</h2><span class="time">40 分鐘</span> <span class="tag" style="background:#1f9d55">${["s1", "s2", "s3", "s4", "s5"].filter((k) => c[k]).length} / 5 完成</span>
+    <p>照著清單一步一步做，每做完一步就打勾。<b>不確定的地方先問老師，不要自己輸入帳號密碼。</b></p>
+    <ol class="steps">
+      <li><b class="n">我的 2D 頭像</b>（約 8 分鐘）<br>用電腦鏡頭拍一張自己的照片，用<b>學校的教育版帳號</b>登入 Gemini，上傳照片，請它畫成卡通頭像。
+        <div class="box warn">真實照片<b>只用在這一步</b>，不要上傳到其他網站。下載頭像後，把照片刪掉。</div>
+        ${ck("s1a", "我用學校帳號登入，生成了卡通頭像")}${ck("s1", "我下載了頭像，並刪掉原本的照片")}</li>
+      <li><b class="n">足球公仔動態 ＋ 2D 圖</b>（約 10 分鐘）<br>選一個足球動作，把「頭像＋動作」寫成精準的描述詞，請 Gemini 畫出足球公仔的 2D 圖。
+        <label class="f" for="w-pose">足球動作</label><select id="w-pose">${POSES.map((x) => `<option value="${x.id}" ${x.id === w.pose ? "selected" : ""}>${x.name}</option>`).join("")}</select>
+        <div class="hint" id="w-hint">想一想：${esc(po.hint)}</div>
+        <div class="row"><div><label class="f" for="w-color">球衣顏色</label><input type="text" id="w-color" maxlength="8" value="${esc(w.color || "")}" placeholder="例如 藍色"></div><div><label class="f" for="w-style">畫風</label><select id="w-style">${STYLES.map((x) => `<option ${x === (w.style || STYLES[0]) ? "selected" : ""}>${x}</option>`).join("")}</select></div></div>
+        <label class="chk"><input type="checkbox" id="w-base" ${w.base !== false ? "checked" : ""}><span>腳下加一個圓形底座（第 1、2 節學過：底座讓公仔站得穩）</span></label>
+        <button class="sec" id="w-make">✨ 幫我組出描述詞</button>
+        <label class="f" for="w-prompt">我的描述詞（可以自己修改，越精準越好）</label><textarea id="w-prompt" style="min-height:130px" maxlength="400">${esc(w.prompt)}</textarea>
+        <button class="sec" id="w-copy">📋 複製描述詞</button>
+        <div class="box"><b>精準描述詞的 6 個要素</b>：主體（誰）、動作、風格、視角、背景、限制。<br>要轉成 3D，圖要這樣畫：<b>只有一個主體、背景單純、輪廓清楚、全身完整入鏡、避免像頭髮絲一樣細的東西</b>。AI 只看一張圖時，看不到的背面會用猜的。</div>
+        ${ck("s2a", "我的描述詞包含：主體、動作、風格、視角、背景、限制")}${ck("s2", "我生成並下載了足球公仔的 2D 圖")}</li>
+      <li><b class="n">開通 Tripo（老師協助）</b>（約 5 分鐘）<br>用縣府的教育版 Gmail 登入 tripo3d.ai。<div class="hint">請老師先決定要用哪個帳號：免費方案的作品可能是公開的，付費方案才能設成不公開、也才能輸出。</div>
+        ${ck("s3", "我登入成功了（或老師已幫我開通）")}</li>
+      <li><b class="n">匯入 2D 圖，生成 3D</b>（約 12 分鐘）<br>把<b>足球公仔的 2D 圖</b>（不是你的照片！）匯入 Tripo，可以加提示詞，也可以不加，然後生成。
+        <label class="f" for="w-tp">我加的提示詞（沒有加就空白）</label><input type="text" id="w-tp" maxlength="100" value="${esc(w.tp || "")}">
+        <div class="box">生成後把模型轉一圈，檢查：<b>腳底站得穩嗎？哪裡懸空？哪裡太細？</b>想一想，如果要印出來，哪裡需要支撐？</div>
+        ${ck("s4a", "我匯入的是 2D 圖，不是真實照片")}${ck("s4", "我生成了 3D，並檢查過懸空處")}</li>
+      <li><b class="n">存到我的作品卡</b>（約 5 分鐘）<br>到「作品卡」填<b>主題、理念、作品連結</b>，並放上你的兩張 2D 圖。
+        ${ck("s5", "我完成了作品卡")}<button class="pri" data-go="t4" style="margin-top:6px">前往作品卡 →</button></li>
+    </ol>
+    <details class="box" style="margin-top:18px"><summary style="cursor:pointer;font-weight:800;min-height:44px;display:flex;align-items:center">之後會用到：Bambu Studio 切片、機型範圍與資源連結（點開）</summary><p>前兩節你在紙上標出了懸空、支撐和底座。這一節，換成讓<b>切片軟體</b>幫你檢查。切片就是把模型「切」成一層層的路徑，再加入溫度、速度、支撐等設定，變成印表機看得懂的指令。</p>
     <div class="box">學校的印表機有 <b>A1 mini、A1、H2S、X2D</b>，都是拓竹（Bambu Lab）的機型，所以我們用 <b>Bambu Studio</b>。各機型的選單位置、版本畫面可能略有不同，但下面四個動作每一款都有。</div>
     <h3>四個通用動作</h3>
     <ol class="steps">
@@ -344,26 +382,50 @@ ol.steps b.n{color:var(--navy);font-size:17px}
     <div class="card"><div class="k">我的公仔放得進哪一台？</div>
       <div class="row" style="grid-template-columns:repeat(3,1fr)"><div><label class="f" for="sz-x">寬（mm）</label><input type="number" id="sz-x" min="1" max="999" value="${esc(c.sx || "")}"></div><div><label class="f" for="sz-y">深（mm）</label><input type="number" id="sz-y" min="1" max="999" value="${esc(c.sy || "")}"></div><div><label class="f" for="sz-z">高（mm）</label><input type="number" id="sz-z" min="1" max="999" value="${esc(c.sz || "")}"></div></div>
       <div id="sz-out" style="font-weight:700;margin-top:8px"></div><div class="hint">想一想：如果只有 A1 mini 放得下，要怎麼把公仔縮小？縮小之後，哪個細節會太細？</div></div>
-    <h3>資源連結</h3><div class="links">${LINKS.map((l) => `<a href="${l[1]}" target="_blank" rel="noopener">${esc(l[0])}<small>${esc(l[2])}</small></a>`).join("")}</div>`;
-    const PR = [["A1 mini", 180, 180, 180], ["A1", 256, 256, 256], ["H2S", 340, 320, 340], ["X2D", 256, 256, 260]];
+    <h3>資源連結</h3><div class="links">${LINKS.map((l) => `<a href="${l[1]}" target="_blank" rel="noopener">${esc(l[0])}<small>${esc(l[2])}</small></a>`).join("")}</div></details>`;
+    $$("[data-go]", $("#t3")).forEach((b) => b.onclick = () => tab(b.dataset.go));
+    const redraw = () => { $("#w-hint").textContent = "想一想：" + (POSES.find((x) => x.id === w.pose) || POSES[0]).hint; };
+    const gen = () => { w.prompt = buildPrompt(w); $("#w-prompt").value = w.prompt; save(); };
+    $("#w-pose").onchange = (e) => { w.pose = e.target.value; redraw(); gen(); };
+    $("#w-color").oninput = (e) => { w.color = e.target.value.trim(); save(); };
+    $("#w-style").onchange = (e) => { w.style = e.target.value; gen(); };
+    $("#w-base").onchange = (e) => { w.base = e.target.checked; gen(); };
+    $("#w-make").onclick = gen;
+    $("#w-prompt").oninput = (e) => { w.prompt = e.target.value; save(); };
+    $("#w-tp").oninput = (e) => { w.tp = e.target.value; save(); };
+    $("#w-copy").onclick = () => { const t = $("#w-prompt").value; const done = () => toast("已複製描述詞"); if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => { $("#w-prompt").select(); document.execCommand && document.execCommand("copy"); done(); }); else { $("#w-prompt").select(); try { document.execCommand("copy"); } catch (e) { } done(); } };
+        const PR = [["A1 mini", 180, 180, 180], ["A1", 256, 256, 256], ["H2S", 340, 320, 340], ["X2D", 256, 256, 260]];
     const calc = () => { const x = +$("#sz-x").value, y = +$("#sz-y").value, z = +$("#sz-z").value; c.sx = $("#sz-x").value; c.sy = $("#sz-y").value; c.sz = $("#sz-z").value; save();
       if (!(x > 0 && y > 0 && z > 0)) { $("#sz-out").textContent = "輸入寬、深、高，看看哪幾台放得下。"; return; }
       const ok = PR.filter((p) => x <= p[1] && y <= p[2] && z <= p[3]).map((p) => p[0]); $("#sz-out").textContent = ok.length ? "放得下：" + ok.join("、") : "四台都放不下，要縮小或分成幾塊分開印。"; };
     ["sz-x", "sz-y", "sz-z"].forEach((i) => $("#" + i).oninput = calc); calc();
-    $$("[data-s3]", $("#t3")).forEach((x) => x.onchange = () => { c[x.dataset.s3] = x.checked; save(); });
-    $("#s3-note").oninput = (e) => { c.note = e.target.value; save(); };
+    $$("[data-s3]", $("#t3")).forEach((x) => x.onchange = () => { c[x.dataset.s3] = x.checked; save(); if (/^s\d$/.test(x.dataset.s3)) { const n = ["s1", "s2", "s3", "s4", "s5"].filter((k) => c[k]).length; const tg = $("#t3 .tag"); if (tg) tg.textContent = n + " / 5 完成"; renderOut(); } });
+    const nt = $("#s3-note"); if (nt) nt.oninput = (e) => { c.note = e.target.value; save(); };
   }
 
   /* ---------- 作品卡 ---------- */
+  const okLink = (u) => /^https:\/\/[^\s]+$/i.test(String(u || "").trim());
+  function shrink(file, cb) { const r = new FileReader(); r.onload = () => { const im = new Image(); im.onload = () => { const m = 720, k = Math.min(1, m / Math.max(im.width, im.height)), c = document.createElement("canvas"); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k); const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height); cb(c.toDataURL("image/jpeg", 0.86)); }; im.onerror = () => cb(null); im.src = r.result; }; r.onerror = () => cb(null); r.readAsDataURL(file); }
   function renderOut() {
-    const solved = T.q.filter((q, i) => S.solved[i]).length;
-    $("#t4").innerHTML = `<h2>我的作品卡</h2><p>把今天的學習存成檔案，交給老師，或留給自己。檔案只存在這台裝置，你按下載才會產生。</p>
-    <div class="card"><div class="k">${esc(ID.cls)} 班 ${esc(ID.seat)} 號 ${esc(S.name)}</div><div class="v">${esc(S.f.name || "（還沒取名字）")}</div><div>${esc(T.role)}・${esc(T.limit.text)}</div><div class="hint">回顧三問完成 ${solved} / 3　草圖：${S.draw ? "已畫" : "還沒畫"}　第 3 節檢核：${["a1", "a2", "a3", "a4"].filter((k) => S.s3[k]).length} / 4</div></div>
-    <p><button class="pri" id="dl-card">⬇️ 下載作品卡（圖片）</button> <button class="sec" id="dl-sk">下載草圖</button> <button class="sec" id="dl-json">下載紀錄（JSON）</button> <button class="sec" id="prt">🖨️ 列印／存成 PDF</button></p>
+    const w = S.w, solved = T.q.filter((q, i) => S.solved[i]).length, n3 = ["s1", "s2", "s3", "s4", "s5"].filter((k) => S.s3[k]).length;
+    const imgBox = (k, label, hint) => `<div><label class="f">${label}</label>${w[k] ? `<img src="${w[k]}" alt="${label}" style="width:100%;max-height:260px;object-fit:contain;border:2px solid var(--line);border-radius:12px;background:#fff">` : `<div class="hint" style="border:2px dashed var(--line);border-radius:12px;padding:22px 10px;text-align:center">${hint}</div>`}
+      <div style="margin-top:6px"><label class="sec" style="display:inline-block;border:2px solid var(--navy);border-radius:12px;padding:9px 14px;font-weight:700;cursor:pointer;min-height:44px">選擇圖片<input type="file" accept="image/*" data-img="${k}" style="position:absolute;opacity:0;width:1px;height:1px"></label>${w[k] ? ` <button class="sec" data-delimg="${k}">移除</button>` : ""}</div></div>`;
+    $("#t4").innerHTML = `<h2>我的作品卡</h2><p>把這次的創作整理成一張作品卡，存成檔案交給老師。檔案只存在這台裝置，你按下載才會產生。</p>
+    <div class="card"><div class="k">${esc(ID.cls)} 班 ${esc(ID.seat)} 號 ${esc(S.name)}</div><div class="v">${esc(w.topic || "（還沒填主題）")}</div><div class="hint">AI 實作 ${n3} / 5　回顧三問 ${solved} / 3　草圖：${S.draw ? "已畫" : "還沒畫"}</div></div>
+    <label class="f" for="o-topic">主題（我的作品是什麼？）</label><input type="text" id="o-topic" maxlength="30" value="${esc(w.topic || "")}" placeholder="例如：射門的小橘隊長">
+    <label class="f" for="o-idea">理念（我為什麼這樣設計？跟 3D 列印有什麼關係？）</label><textarea id="o-idea" maxlength="240" placeholder="可以寫：我選這個動作的原因、哪裡是懸空處、我怎麼處理底座或支撐">${esc(w.idea || "")}</textarea>
+    <label class="f" for="o-link">作品連結（把 Tripo 的分享連結貼在這裡）</label><input type="text" id="o-link" maxlength="300" inputmode="url" value="${esc(w.link || "")}" placeholder="https://…">
+    <div class="hint" id="o-linkmsg">${w.link ? (okLink(w.link) ? "✅ 連結格式正確" : "⚠️ 連結要以 https:// 開頭") : "老師有付費版，可以幫你輸出模型，輸出後把連結貼在這裡。"}</div>
+    <div class="row" style="margin-top:6px">${imgBox("img1", "我的 2D 頭像", "還沒有頭像<br>（卡通頭像，不是真實照片）")}${imgBox("img2", "足球公仔 2D 圖", "還沒有足球公仔圖")}</div>
+    <p style="margin-top:14px"><button class="pri" id="dl-card">⬇️ 下載作品卡（圖片）</button> <button class="sec" id="dl-json">下載紀錄（JSON）</button> <button class="sec" id="prt">🖨️ 列印／存成 PDF</button></p>
     <p class="hint">想換人使用這台裝置：<button class="sec" id="swap">換座號</button></p>`;
-    $("#dl-card").onclick = () => dlCard(); $("#dl-sk").onclick = () => { if (!S.draw) { toast("還沒有草圖"); return; } dl(S.draw, fname("草圖", "png")); };
-    $("#dl-json").onclick = () => dl("data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ 班級: ID.cls, 座號: ID.seat, 姓名: S.name, 任務卡: T.code, 角色: T.role, 限制: T.limit.text, 情境: T.scene.text, 彩蛋: T.bonus.text, 回顧三問: T.q.map((q, i) => ({ 題: q.topic, 完成: !!S.solved[i], 嘗試錯選: S.tries[i] || [] })), 公仔: S.f, 解法: FIXES.filter((x, i) => S.fix[i]), 互評: S.peer, 自評: ["我能指出自己的公仔哪裡懸空", "我知道為什麼要加底座或支撐", "我的設計裡有我自己想出來的點子"].filter((x, i) => S.self[i]), 第3節: S.s3 }, null, 2)), fname("紀錄", "json"));
-    $("#prt").onclick = () => { $$("section.pg").forEach((s) => s.classList.remove("printme")); $("#t4").classList.add("printme"); window.print(); };
+    const bind = (id, k) => { $("#" + id).oninput = (e) => { w[k] = e.target.value; save(); if (k === "topic") { const v = $("#t4 .card .v"); if (v) v.textContent = w.topic || "（還沒填主題）"; } if (k === "link") { const m = $("#o-linkmsg"); m.textContent = w.link ? (okLink(w.link) ? "✅ 連結格式正確" : "⚠️ 連結要以 https:// 開頭") : ""; } }; };
+    bind("o-topic", "topic"); bind("o-idea", "idea"); bind("o-link", "link");
+    $$("[data-img]", $("#t4")).forEach((i) => i.onchange = () => { const f = i.files && i.files[0]; if (!f) return; shrink(f, (d) => { if (!d) { toast("這個檔案無法讀取"); return; } w[i.dataset.img] = d; if (!save()) { toast("儲存空間不足，圖片太大"); } renderOut(); }); });
+    $$("[data-delimg]", $("#t4")).forEach((b) => b.onclick = () => { delete w[b.dataset.delimg]; save(); renderOut(); });
+    $("#dl-card").onclick = () => dlCard();
+    $("#dl-json").onclick = () => dl("data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ 班級: ID.cls, 座號: ID.seat, 姓名: S.name, 主題: w.topic || "", 理念: w.idea || "", 作品連結: w.link || "", 足球動作: (POSES.find((x) => x.id === w.pose) || {}).name || "", 描述詞: w.prompt || "", Tripo提示詞: w.tp || "", AI實作完成: ["s1", "s2", "s3", "s4", "s5"].map((k) => !!S.s3[k]), 任務卡: T.code, 角色: T.role, 限制: T.limit.text, 情境: T.scene.text, 回顧三問: T.q.map((q, i) => ({ 題: q.topic, 完成: !!S.solved[i], 嘗試錯選: S.tries[i] || [] })), 公仔: S.f, 互評: S.peer }, null, 2)), fname("紀錄", "json"));
+    $("#prt").onclick = () => { $$("section.pg").forEach((x) => x.classList.remove("printme")); $("#t4").classList.add("printme"); window.print(); };
     $("#swap").onclick = () => { showLogin(); };
   }
   const KN = { "草圖": "sketch", "紀錄": "record", "作品卡": "card" };
@@ -371,22 +433,23 @@ ol.steps b.n{color:var(--navy);font-size:17px}
   function dl(href, name) { const go = (u, rev) => { const a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); if (rev) setTimeout(() => URL.revokeObjectURL(u), 4000); };
     try { const i = href.indexOf(","), meta = href.slice(5, i), isB64 = /;base64$/.test(meta), body = href.slice(i + 1); let blob; if (isB64) { const bin = atob(body), u8 = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) u8[k] = bin.charCodeAt(k); blob = new Blob([u8], { type: meta.replace(/;base64$/, "") }); } else blob = new Blob([decodeURIComponent(body)], { type: meta.split(";")[0] }); go(URL.createObjectURL(blob), true); } catch (e) { go(href, false); } }
   function wrap(g, text, x, y, w, lh, max) { let line = "", n = 0; for (const ch of String(text || "")) { if (g.measureText(line + ch).width > w || ch === "\n") { g.fillText(line, x, y); y += lh; line = ch === "\n" ? "" : ch; if (++n >= max) return y; } else line += ch; } if (line) { g.fillText(line, x, y); y += lh; } return y; }
-  function dlCard() {
-    const c = document.createElement("canvas"); c.width = 1240; c.height = 1754; const g = c.getContext("2d"), F = '"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif';
+  function loadImg(src) { return new Promise((res) => { if (!src) return res(null); const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; }); }
+  function fit(g, im, x, y, W, H) { g.fillStyle = "#f4f7fc"; g.fillRect(x, y, W, H); if (im) { const k = Math.min(W / im.width, H / im.height), w = im.width * k, h = im.height * k; g.drawImage(im, x + (W - w) / 2, y + (H - h) / 2, w, h); } else { g.fillStyle = "#9aa7bd"; g.font = "24px sans-serif"; g.textAlign = "center"; g.fillText("（尚未放圖）", x + W / 2, y + H / 2); g.textAlign = "left"; } g.strokeStyle = "#0a1a33"; g.lineWidth = 3; g.strokeRect(x, y, W, H); }
+  async function dlCard() {
+    const w = S.w, c = document.createElement("canvas"); c.width = 1240; c.height = 1754; const g = c.getContext("2d"), F = '"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif';
     g.fillStyle = "#fff"; g.fillRect(0, 0, 1240, 1754); g.fillStyle = "#0a1a33"; g.fillRect(0, 0, 1240, 110); g.fillStyle = "#fff"; g.font = "bold 40px " + F; g.fillText("3DP同樂製造｜我的作品卡", 50, 70);
     g.font = "26px " + F; g.fillStyle = "#ffd9b0"; g.textAlign = "right"; g.fillText(ID.cls + " 班 " + ID.seat + " 號 " + (S.name || ""), 1190, 70); g.textAlign = "left";
-    g.fillStyle = "#0a1a33"; g.font = "bold 38px " + F; g.fillText(S.f.name || "（我的公仔）", 50, 170);
-    g.font = "26px " + F; g.fillStyle = "#1c2a44"; let y = wrap(g, "角色：" + T.role + "　結構特色：" + T.limit.text, 50, 215, 1140, 38, 2); y = wrap(g, "使用情境：" + T.scene.text, 50, y, 1140, 38, 3);
-    g.fillStyle = "#a24a00"; g.font = "bold 22px " + F; g.fillText("任務卡編號 " + T.code, 50, y + 4); y += 30;
-    const im = new Image(); const finish = () => {
-      g.strokeStyle = "#0a1a33"; g.lineWidth = 3; g.strokeRect(50, y, 1140, 760); if (im.width) g.drawImage(im, 52, y + 2, 1136, 756); y += 800;
-      g.fillStyle = "#0a1a33"; g.font = "bold 28px " + F;
-      const blocks = [["故事", S.f.story], ["最容易失敗的地方", S.f.risk], ["我的解法", FIXES.filter((x, i) => S.fix[i]).join("、")], ["機型與材料", (S.f.mat && S.f.mat.indexOf("請選擇") < 0 ? S.f.mat : "") + (S.f.why ? "：" + S.f.why : "")], ["秘密功能：" + T.bonus.text, S.f.bonus]];
-      blocks.forEach((b) => { if (y > 1640) return; g.fillStyle = "#0a1a33"; g.font = "bold 24px " + F; g.fillText(b[0], 50, y); g.font = "23px " + F; g.fillStyle = "#1c2a44"; y = wrap(g, b[1] || "—", 50, y + 32, 1140, 32, 3) + 8; });
-      g.fillStyle = "#5b6b86"; g.font = "20px " + F; g.fillText("回顧三問完成 " + T.q.filter((q, i) => S.solved[i]).length + " / 3　自評 ⭐ " + [0, 1, 2].filter((i) => S.self[i]).length + " / 3", 50, 1725);
-      dl(c.toDataURL("image/png"), fname("作品卡", "png")); toast("已下載作品卡");
-    };
-    if (S.draw) { im.onload = finish; im.onerror = finish; im.src = S.draw; } else finish();
+    g.fillStyle = "#a24a00"; g.font = "bold 24px " + F; g.fillText("主題", 50, 165); g.fillStyle = "#0a1a33"; g.font = "bold 46px " + F; let y = wrap(g, w.topic || "（我的作品）", 50, 220, 1140, 56, 2);
+    const [i1, i2, i3] = await Promise.all([loadImg(w.img1), loadImg(w.img2), loadImg(S.draw)]);
+    y += 10; g.fillStyle = "#5b6b86"; g.font = "bold 22px " + F; g.fillText("我的 2D 頭像", 50, y); g.fillText("足球公仔 2D 圖", 640, y); y += 14;
+    fit(g, i1, 50, y, 550, 700); fit(g, i2, 640, y, 550, 700); y += 750;
+    g.fillStyle = "#a24a00"; g.font = "bold 24px " + F; g.fillText("理念", 50, y); g.fillStyle = "#1c2a44"; g.font = "27px " + F; y = wrap(g, w.idea || "—", 50, y + 44, 1140, 40, 6) + 14;
+    g.fillStyle = "#a24a00"; g.font = "bold 24px " + F; g.fillText("作品連結", 50, y); g.fillStyle = "#2563eb"; g.font = "23px " + F; y = wrap(g, w.link || "—", 50, y + 38, 1140, 32, 3) + 14;
+    const po = POSES.find((x) => x.id === w.pose); g.fillStyle = "#5b6b86"; g.font = "21px " + F;
+    if (po) { g.fillText("足球動作：" + po.name + "　　任務卡：" + T.code, 50, y + 10); y += 40; }
+    if (i3 && y < 1500) { const h = Math.min(250, 1690 - y - 10); g.fillStyle = "#5b6b86"; g.font = "bold 20px " + F; g.fillText("第 2 節草圖", 50, y + 6); fit(g, i3, 50, y + 16, Math.round(h * 1.5), h); }
+    g.fillStyle = "#5b6b86"; g.font = "20px " + F; g.fillText("AI 實作 " + ["s1", "s2", "s3", "s4", "s5"].filter((k) => S.s3[k]).length + " / 5　回顧三問 " + T.q.filter((q, i) => S.solved[i]).length + " / 3", 50, 1725);
+    dl(c.toDataURL("image/png"), fname("作品卡", "png")); toast("已下載作品卡");
   }
 
   /* ---------- 啟動 ---------- */
