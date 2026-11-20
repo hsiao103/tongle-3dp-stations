@@ -1,0 +1,384 @@
+<!DOCTYPE html><html lang="zh-Hant-TW"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>3DP同樂製造｜我的學習單</title><style>:root{--navy:#0a1a33;--navy2:#13233f;--orange:#ff8a1f;--ink:#1c2a44;--mute:#5b6b86;--line:#d9e1ef;--bg:#f4f7fc;--ok:#1f9d55;--bad:#c2410c;--blue:#2563eb}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 "Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif}
+header.top{background:var(--navy);color:#fff;padding:14px 18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header.top h1{font-size:19px;margin:0;flex:1;min-width:220px}header.top small{display:block;color:#b9cbe8;font-weight:400;font-size:13px}
+header.top .who{font-size:14px;color:#ffd9b0}
+nav.tabs{display:flex;gap:6px;overflow-x:auto;padding:10px 12px 0;background:#e6ecf7;position:sticky;top:0;z-index:5}
+nav.tabs button{flex:0 0 auto;border:0;border-radius:12px 12px 0 0;padding:10px 14px;background:#d3dcee;color:var(--ink);font:inherit;font-weight:700;cursor:pointer;min-height:44px}
+nav.tabs button.on{background:#fff;color:var(--navy);box-shadow:0 -3px 0 var(--orange) inset}
+main{max-width:920px;margin:0 auto;padding:16px 14px 80px}
+section.pg{display:none;background:#fff;border:1px solid var(--line);border-radius:0 0 16px 16px;padding:18px}
+section.pg.on{display:block}
+h2{font-size:22px;margin:4px 0 6px}h3{font-size:18px;margin:22px 0 8px;color:var(--navy)}
+.time{display:inline-block;background:#fff3e6;color:#a24a00;border-radius:999px;padding:2px 12px;font-size:13px;font-weight:700}
+.card{border:2px solid var(--orange);border-radius:18px;background:linear-gradient(160deg,#fffaf3,#fff);padding:16px;margin:12px 0}
+.card .k{color:var(--mute);font-size:13px;font-weight:700}.card .v{font-size:20px;font-weight:800;color:var(--navy);margin-bottom:8px}
+.card .code{font:700 14px ui-monospace,Menlo,Consolas,monospace;color:#a24a00}
+.back{background:var(--navy);color:#fff;border-radius:18px;padding:34px 16px;text-align:center;margin:12px 0}
+.back b{display:block;font-size:22px;margin-bottom:6px}
+button.pri,a.pri{display:inline-block;border:0;background:var(--orange);color:#fff;font:inherit;font-weight:800;padding:12px 20px;border-radius:12px;cursor:pointer;min-height:46px;text-decoration:none}
+button.sec{border:2px solid var(--navy);background:#fff;color:var(--navy);font:inherit;font-weight:700;padding:9px 14px;border-radius:12px;cursor:pointer;min-height:44px}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.q{border:1px solid var(--line);border-radius:14px;padding:14px;margin:12px 0;background:#fcfdff}
+.q .st{font-weight:700;margin-bottom:8px}
+.read{background:#0f2a4d;color:#e6f0ff;border-radius:12px;padding:10px 14px;margin:6px 0 10px;font-size:15px}.read b{color:#ffd28a}
+.opt{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;border:2px solid var(--line);background:#fff;border-radius:12px;padding:10px 12px;margin:7px 0;font:inherit;cursor:pointer;min-height:48px}
+.opt .l{flex:0 0 28px;height:28px;border-radius:50%;background:var(--navy);color:#fff;display:grid;place-items:center;font-weight:800;font-size:14px}
+.opt.right{border-color:var(--ok);background:#effaf3}.opt.wrong{border-color:var(--bad);background:#fff6ef}
+.fb{margin:6px 0 0 38px;font-size:14.5px;color:var(--bad)}.opt.right+.fb{color:var(--ok)}
+.tag{font-size:12px;font-weight:700;color:#fff;background:var(--mute);border-radius:6px;padding:1px 8px;margin-left:6px}
+label.f{display:block;font-weight:700;margin:12px 0 4px}
+input[type=text],input[type=number],select,textarea{width:100%;border:2px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;background:#fff;color:var(--ink)}
+textarea{min-height:84px;resize:vertical}
+.chk{display:flex;gap:10px;align-items:flex-start;padding:8px 4px;min-height:44px}.chk input{width:22px;height:22px;margin-top:3px;flex:0 0 22px}
+.tools{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.tools button{min-height:44px}
+.tools .sw{width:36px;height:36px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 2px var(--line);padding:0;min-height:0}.tools .sw.on{box-shadow:0 0 0 3px var(--navy)}
+.tools button.on{background:var(--navy);color:#fff}
+.cv{width:100%;border:2px solid var(--navy);border-radius:12px;background:#fff;touch-action:none;display:block;cursor:crosshair}
+.hint{color:var(--mute);font-size:14px}
+.box{background:#eef4ff;border-left:5px solid var(--blue);border-radius:8px;padding:10px 14px;margin:10px 0}
+.box.warn{background:#fff6e8;border-color:var(--orange)}
+table.t{border-collapse:collapse;width:100%;font-size:15px}table.t th,table.t td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}table.t th{background:#eef2fa}
+ol.steps{counter-reset:s;list-style:none;padding:0}ol.steps>li{counter-increment:s;position:relative;border:1px solid var(--line);border-radius:14px;padding:12px 14px 12px 58px;margin:10px 0;background:#fcfdff}
+ol.steps>li::before{content:counter(s);position:absolute;left:14px;top:12px;width:32px;height:32px;border-radius:50%;background:var(--orange);color:#fff;font-weight:800;display:grid;place-items:center}
+ol.steps b.n{color:var(--navy);font-size:17px}
+.links a{display:block;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin:6px 0;color:var(--blue);font-weight:700;text-decoration:none;word-break:break-all}.links small{display:block;color:var(--mute);font-weight:400}
+.login{max-width:440px;margin:48px auto;background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 18px;border-radius:999px;font-weight:700;z-index:50}
+.hide{display:none!important}
+@media(max-width:520px){.row{grid-template-columns:1fr}main{padding:10px 8px 80px}section.pg{padding:14px}}
+@media(prefers-reduced-motion:no-preference){.opt{transition:border-color .15s,background .15s}}
+/* ---- 紙本 ---- */
+.psheet{width:210mm;height:297mm;padding:12mm 14mm;background:#fff;color:#000;page-break-after:always;break-after:page;overflow:hidden;font-size:11.5pt;line-height:1.55;position:relative}
+.psheet h4{margin:0 0 4mm;font-size:16pt;border-bottom:3px solid #ff8a1f;padding-bottom:2mm;display:flex;justify-content:space-between;align-items:flex-end}
+.psheet h4 small{font-size:10pt;font-weight:400}
+.psheet .ptask{border:2px solid #0a1a33;border-radius:4mm;padding:3mm 4mm;margin-bottom:3mm;display:grid;grid-template-columns:1fr 1fr;gap:1mm 6mm}
+.psheet .ptask div b{color:#a24a00;font-size:9.5pt;display:block}
+.psheet .pq{margin:2.5mm 0}.psheet .pq .s{font-weight:700}.psheet .pq .o{margin:0.6mm 0 0 5mm}
+.psheet .pread{border:1px solid #888;padding:1.5mm 3mm;margin:1mm 0;font-size:10.5pt}
+.psheet .pfoot{position:absolute;left:14mm;right:14mm;bottom:8mm;font-size:8.5pt;color:#555;display:flex;justify-content:space-between}
+.psheet .sk{border:2px solid #0a1a33;height:92mm;background-image:linear-gradient(#e3e8f2 1px,transparent 1px),linear-gradient(90deg,#e3e8f2 1px,transparent 1px);background-size:6mm 6mm;margin:2mm 0}
+.psheet .ln{border-bottom:1px solid #444;height:7mm;margin:0}
+.psheet .leg{font-size:10pt;color:#333}
+@page{size:A4;margin:0}
+@media print{body{background:#fff}header.top,nav.tabs,.noprint,.toast{display:none!important}main{padding:0;max-width:none}section.pg{display:none!important}section.pg.printme{display:block!important;border:0;padding:0}.psheet{margin:0}body.paper .ui{display:none!important}}
+@media screen{.psheet{margin:12px auto;box-shadow:0 2px 12px rgba(0,0,0,.2)}}
+</style></head><body>
+<div id="login" class="login hide"><h2 style="margin-top:0">3DP同樂製造・我的學習單</h2><p>輸入班級和座號，領取你專屬的任務卡。資料只存在這台裝置。</p>
+<div class="row"><div><label class="f" for="li-cls">班級</label><input type="text" id="li-cls" inputmode="numeric" maxlength="8" placeholder="例如 601"></div><div><label class="f" for="li-seat">座號</label><input type="number" id="li-seat" min="1" max="99" placeholder="例如 7"></div></div>
+<label class="f" for="li-name">姓名（可以不填）</label><input type="text" id="li-name" maxlength="12"><p id="li-err" role="alert" style="color:#c2410c;font-weight:700;min-height:1.5em"></p><button class="pri" id="li-go">開始</button></div>
+<div id="app" class="hide"><header class="top"><h1>3DP同樂製造・我的學習單<small>3DP工作平台學習・請依序挑戰</small></h1><span class="who" id="who"></span><button class="sec" id="chg" style="background:#13233f;color:#fff;border-color:#2c4673">換座號</button></header>
+<nav class="tabs" role="tablist"><button data-t="t0">任務卡</button><button data-t="t1">第1節 回顧三問</button><button data-t="t2">第2節 想像挑戰</button><button data-t="t3">第3節 軟體學習</button><button data-t="t4">作品卡</button></nav>
+<main><section class="pg" id="t0"></section><section class="pg" id="t1"></section><section class="pg" id="t2"></section><section class="pg" id="t3"></section><section class="pg" id="t4"></section></main></div>
+<script>/* 學習單引擎：同一個班級＋座號，永遠產生同一份題目；同班座號 1~320 之間組合不重複 */
+(function (g) {
+  const ROLES = ["戴橘帽的校慶小吉祥物", "會巡邏的小機器人", "抱著書包的小學生", "長頸鹿", "小恐龍", "提著燈籠的狐狸", "外星小朋友", "太空貓咪", "微笑的鯨魚", "守護校園的小獅子"];
+  const LIMITS = [
+    { id: "arm", text: "一隻手高高舉起", fix: "在舉起的手臂下方加支撐，並把手臂和身體連接的地方加粗" },
+    { id: "bighead", text: "頭很大、腳很細", fix: "把底座加寬，並讓細細的腳加粗一點，重心才會穩" },
+    { id: "wing", text: "張開兩片翅膀", fix: "在翅膀下方加支撐，或把翅膀改成比較斜、比較小的角度" },
+    { id: "tail", text: "尾巴向上捲起", fix: "在尾巴捲起來懸空的地方加支撐，並把尾巴根部加粗" },
+    { id: "onefoot", text: "單腳站立、另一隻腳抬起", fix: "把底座加寬，並在抬起的那隻腳下方加支撐" },
+    { id: "hat", text: "戴著超大的帽簷", fix: "在帽簷下方加支撐（向外伸出去的帽簷是懸空處）" },
+    { id: "horn", text: "頭上有兩根細長的角", fix: "把角的根部加粗，並讓角稍微縮短或傾斜，減少懸空" },
+    { id: "ball", text: "雙手抱著一顆大圓球", fix: "在圓球下方加支撐，或讓圓球貼靠在身體上" }
+  ];
+  const SCENES = [
+    { id: "play", text: "校慶攤位上，小朋友會直接拿著公仔玩", ok: "對！要讓小朋友直接拿著玩，就要選安全、味道小、不用特別防護的組合。" },
+    { id: "fine", text: "想做一個手掌大小、細節非常多的收藏小物。教室有手套、通風、洗淨與二次固化的設備，而且由老師操作", ok: "沒錯！細節很多、又有防護條件時，光固化的細緻度才派得上用場。" },
+    { id: "big", text: "要做一個很大件的展示品，而且預算有限", ok: "對！大件、省預算，是 FDM 的強項。" },
+    { id: "crowd", text: "要在教室現場列印，很多同學會圍在旁邊看", ok: "沒錯！圍很多人的現場，要選沒有刺激性氣味、不必戴手套處理的做法。" }
+  ];
+  const OPT = { fp: "FDM 印表機＋PLA 線材", rs: "光固化印表機＋樹脂", fa: "FDM 印表機＋ABS 線材", rb: "光固化印表機＋樹脂，取件時不戴手套、也不洗淨" };
+  const SAFE = "樹脂沒洗淨、沒固化完全就直接拿取，皮膚可能不舒服，防護步驟不能省。";
+  const ABS = "ABS 味道較重又容易翹曲，需要通風與保溫，現場環境不好控制。";
+  const Q1 = {
+    play: { c: "fp", w: { rs: "樹脂沒固化完全時會刺激皮膚，不適合讓小朋友直接拿著玩。", fa: ABS, rb: SAFE } },
+    fine: { c: "rs", w: { fp: "FDM 的層紋比較明顯，很小、很細的地方不容易做得清楚。", fa: "ABS 同樣是 FDM，細節受限，還有味道與翹曲的問題。", rb: SAFE } },
+    big: { c: "fp", w: { rs: "光固化能印的尺寸比較小，樹脂也比較貴，不適合大件又省預算。", fa: "ABS 的大件更容易翹曲，需要通風與保溫，現場不容易控制。", rb: SAFE } },
+    crowd: { c: "fp", w: { rs: "樹脂有氣味、要戴手套處理，圍很多人操作不安全。", fa: ABS, rb: SAFE } }
+  };
+  const BONUS = [
+    { id: "drawer", text: "肚子裡有一個會滑出來的小抽屜", think: "抽屜和外殼之間要留多少縫，才不會卡住？（印出來一定會有一點誤差）" },
+    { id: "phone", text: "可以當手機架", think: "手機要靠的斜面是不是懸空？要怎麼擺放才印得穩？" },
+    { id: "hook", text: "可以掛在書包上", think: "吊孔要放在哪裡？孔的周圍要加厚多少，才不容易斷？" },
+    { id: "pen", text: "頭頂可以插筆", think: "洞很深、筆又重的時候，底座夠穩嗎？" },
+    { id: "name", text: "底座刻著你的名字", think: "字要凸出來還是凹進去？哪一種比較容易印好？" },
+    { id: "light", text: "晚上會發光", think: "要放小燈的話，哪裡要留空間？外殼多薄才透得出光？" },
+    { id: "open", text: "可以分成兩半打開", think: "兩半要怎麼擺放，才不用加很多支撐？" },
+    { id: "pocket", text: "小到可以放進口袋", think: "縮小之後，哪個細節會太細、印不出來？" }
+  ];
+  const BASE_FIX = { nothing: "什麼都不用做，直接印，靠運氣", all: "把支撐全部打開最保險", shrink: "把整個模型縮小一半，問題就會自己消失" };
+  const BASE_WHY = { nothing: "3D 列印靠的是先理解原理，不是運氣。", all: "支撐太多會浪費材料，還會讓表面很難處理。", shrink: "縮小只會讓細的地方更細，懸空的問題還在。" };
+
+  function xmur(s) { let h = 1779033703 ^ s.length; for (let i = 0; i < s.length; i++) { h = Math.imul(h ^ s.charCodeAt(i), 3432918353); h = h << 13 | h >>> 19; } return function () { h = Math.imul(h ^ h >>> 16, 2246822507); h = Math.imul(h ^ h >>> 13, 3266489909); return (h ^= h >>> 16) >>> 0; }; }
+  function rng(seed) { let a = xmur(seed)(); return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function shuffle(arr, r) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  const TOTAL = ROLES.length * LIMITS.length * SCENES.length; // 320
+  const L = "ABCD";
+
+  function mkQ(r, stem, items, extra) { // items: [{key,text,why,correct}]
+    const sh = shuffle(items, r).map((o, i) => ({ id: L[i], key: o.key, text: o.text, why: o.why || "", correct: !!o.correct }));
+    return Object.assign({ stem, options: sh, answer: sh.find((o) => o.correct).id }, extra || {});
+  }
+
+  function gen(cls, seat) {
+    cls = String(cls).trim(); seat = parseInt(seat, 10) || 1;
+    const r = rng("q|" + cls + "|" + seat);
+    const c = (xmur("c|" + cls)() % TOTAL + (seat - 1) * 137) % TOTAL;
+    const role = ROLES[c % ROLES.length], limit = LIMITS[Math.floor(c / ROLES.length) % LIMITS.length], scene = SCENES[Math.floor(c / (ROLES.length * LIMITS.length)) % SCENES.length];
+    const bonus = BONUS[Math.floor(r() * BONUS.length)];
+    const code = cls + "-" + String(seat).padStart(2, "0") + "-" + (c % ROLES.length) + String.fromCharCode(65 + Math.floor(c / ROLES.length) % LIMITS.length) + (Math.floor(c / (ROLES.length * LIMITS.length)) % SCENES.length);
+
+    // Q1：機型與材料
+    const q1def = Q1[scene.id];
+    const q1 = mkQ(r, "情境：" + scene.text + "。你會選哪一組？", Object.keys(OPT).map((k) => ({ key: k, text: OPT[k], correct: k === q1def.c, why: q1def.w[k] || "" })), { ok: scene.ok, topic: "FDM 與光固化怎麼選" });
+
+    // Q2：印前三檢核
+    const kinds = ["env", "fila", "plate"], bad = kinds[Math.floor(r() * 3)];
+    const t = 9 + Math.floor(r() * 5), need = 26 + Math.floor(r() * 9), left = 8 + Math.floor(r() * 10);
+    const read = {
+      env: bad === "env" ? "室溫 " + t + "℃，窗邊的冷風正對著機台吹" : "室溫 " + (24 + Math.floor(r() * 4)) + "℃，沒有風直接吹到機台",
+      fila: bad === "fila" ? "線材剩 " + left + " g，這個作品預估要用 " + need + " g" : "線材剩 " + (need + 60 + Math.floor(r() * 40)) + " g，這個作品預估要用 " + need + " g",
+      plate: bad === "plate" ? "列印板左後角輕按會翹動，邊緣有縫隙，一推就滑" : "列印板四個角都平整，輕推也不會滑動"
+    };
+    const NAME = { fila: "耗材", plate: "板子", env: "環境" };
+    const q2items = ["fila", "plate", "env"].map((k) => ({ key: k, text: "先處理「" + NAME[k] + "」這一項", correct: k === bad, why: "這一項的讀數目前看起來沒有問題。" }));
+    q2items.push({ key: "go", text: "三項都沒問題，直接開印", why: "三項讀數裡有地方不正常，直接開印很容易印到一半失敗。" });
+    const q2 = mkQ(r, "開印前，你已經把「耗材、板子、環境」三項都看過了。讀數如下，你要先處理哪一項？", q2items, { reading: [["耗材", read.fila], ["板子", read.plate], ["環境", read.env]], ok: "對！印前多檢查幾分鐘，可以省下失敗重印的幾個小時。", topic: "印前三檢核" });
+
+    // Q3：結構
+    const q3items = [{ key: "fix", text: limit.fix, correct: true }].concat(Object.keys(BASE_FIX).map((k) => ({ key: k, text: BASE_FIX[k], why: BASE_WHY[k] })));
+    const q3 = mkQ(r, "你的「" + role + "」" + limit.text + "。切片前，最該先做的是什麼？", q3items, { ok: "沒錯！懸空、底座、支撐是 3D 列印最基本的結構觀念。", topic: "懸空、底座、支撐" });
+
+    return { cls, seat, code, role, limit, scene, bonus, q: [q1, q2, q3] };
+  }
+  g.Engine = { gen, TOTAL, ROLES, LIMITS, SCENES, BONUS };
+  if (typeof module !== "undefined") module.exports = g.Engine;
+})(typeof window !== "undefined" ? window : globalThis);
+</script><script>(function () {
+  const E = window.Engine, $ = (s, r) => (r || document).querySelector(s), $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const store = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }, del(k) { try { localStorage.removeItem(k); } catch (e) { } } };
+  let ID = store.get("3dpl:id", null), S, T, toastT;
+  const skey = () => "3dpl:s:" + ID.cls + "-" + ID.seat;
+  const save = () => store.set(skey(), S);
+  function toast(m) { let t = $(".toast"); if (!t) { t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); document.body.appendChild(t); } t.textContent = m; t.classList.remove("hide"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.add("hide"), 1800); }
+
+  /* ---------- 登入 ---------- */
+  function showLogin() {
+    $("#app").classList.add("hide"); $("#login").classList.remove("hide");
+    $("#li-cls").value = ID ? ID.cls : ""; $("#li-seat").value = ID ? ID.seat : ""; $("#li-name").value = ID ? (store.get(skey(), {}).name || "") : "";
+  }
+  function doLogin() {
+    const cls = $("#li-cls").value.trim(), seat = parseInt($("#li-seat").value, 10), name = $("#li-name").value.trim();
+    if (!cls || cls.length > 8) { $("#li-err").textContent = "請輸入班級，例如 601"; return; }
+    if (!(seat >= 1 && seat <= 99)) { $("#li-err").textContent = "座號請輸入 1 到 99 的數字"; return; }
+    $("#li-err").textContent = ""; ID = { cls, seat }; store.set("3dpl:id", ID); load(); S.name = name || S.name; save(); start();
+  }
+  function load() {
+    S = store.get(skey(), null) || { name: "", flipped: false, tries: {}, solved: {}, draw: "", f: {}, peer: {}, self: {}, fix: {}, s3: {} };
+    ["tries", "solved", "f", "peer", "self", "fix", "s3"].forEach((k) => { if (!S[k]) S[k] = {}; });
+    T = E.gen(ID.cls, ID.seat);
+  }
+
+  /* ---------- 頁面骨架 ---------- */
+  function start() {
+    $("#login").classList.add("hide"); $("#app").classList.remove("hide");
+    $("#who").textContent = ID.cls + " 班 " + ID.seat + " 號" + (S.name ? "・" + S.name : "");
+    renderCard(); renderQ(); renderS2(); renderS3(); renderOut(); tab("t0");
+  }
+  function tab(id) { $$("nav.tabs button").forEach((b) => b.classList.toggle("on", b.dataset.t === id)); $$("section.pg").forEach((s) => s.classList.toggle("on", s.id === id)); window.scrollTo({ top: 0 }); }
+
+  /* ---------- 任務卡 ---------- */
+  function renderCard() {
+    const open = S.flipped;
+    $("#t0").innerHTML = `<h2>我的任務卡</h2><span class="time">先翻牌，再往下一節</span>
+    <p>每個人抽到的任務都不一樣，但每個人學到的 3D 列印關鍵知識是一樣的：<b>怎麼選機器和材料、印前要檢查什麼、懸空處怎麼辦</b>。</p>
+    ${open ? `<div class="card"><div class="k">我的角色</div><div class="v">${esc(T.role)}</div>
+      <div class="k">它有一個特別的地方（結構限制）</div><div class="v">${esc(T.limit.text)}</div>
+      <div class="k">它要用在哪裡（使用情境）</div><div class="v" style="font-size:17px">${esc(T.scene.text)}</div>
+      <div class="k">任務卡編號（互相檢查時用）</div><div class="code">${esc(T.code)}</div></div>
+      <div class="box">接下來：<b>第 1 節</b>回答三個問題，並開始畫草圖；<b>第 2 節</b>完成設計、互相挑錯、存成作品卡；<b>第 3 節</b>學軟體。</div>
+      <button class="pri" data-go="t1">開始第 1 節 →</button>` :
+      `<div class="back"><b>🎴 你的任務卡還蓋著</b>翻開看看，你抽到什麼角色？</div><button class="pri" id="flip">翻開我的任務卡</button>`}
+    <h3>我的姓名（只存在這台裝置，不會上傳）</h3><input type="text" id="nm" maxlength="12" value="${esc(S.name)}" placeholder="可以不填">`;
+    const f = $("#flip"); if (f) f.onclick = () => { S.flipped = true; save(); renderCard(); renderQ(); renderS2(); };
+    $("#nm").oninput = (e) => { S.name = e.target.value; save(); $("#who").textContent = ID.cls + " 班 " + ID.seat + " 號" + (S.name ? "・" + S.name : ""); };
+    $$("[data-go]", $("#t0")).forEach((b) => b.onclick = () => tab(b.dataset.go));
+  }
+  const gate = (id) => { if (S.flipped) return ""; return `<div class="box warn">請先到「任務卡」翻牌。<br><button class="sec" data-go="t0" style="margin-top:8px">去翻牌</button></div>`; };
+
+  /* ---------- 第1節 ---------- */
+  function renderQ() {
+    const el = $("#t1"); if (!S.flipped) { el.innerHTML = `<h2>第 1 節・回顧三問</h2>` + gate(); $$("[data-go]", el).forEach((b) => b.onclick = () => tab("t0")); return; }
+    const done = T.q.filter((q, i) => S.solved[i]).length;
+    el.innerHTML = `<h2>第 1 節・回顧三問</h2><span class="time">約 15 分鐘</span> <span class="tag" style="background:#1f9d55">${done} / 3 完成</span>
+    <p class="hint">不計分。選錯會告訴你為什麼不合適，可以再選一次。每個人的題目情境都不同，請看清楚自己的任務卡。</p>` +
+      T.q.map((q, i) => `<div class="q" data-q="${i}"><div class="st">第 ${i + 1} 問・${esc(q.topic)}</div><div class="st" style="font-weight:600">${esc(q.stem)}</div>
+      ${q.reading ? `<div class="read">${q.reading.map((r) => `<div><b>${esc(r[0])}</b>　${esc(r[1])}</div>`).join("")}</div>` : ""}
+      ${q.options.map((o) => { const st = (S.solved[i] && o.id === q.answer) ? "right" : (S.tries[i] && S.tries[i].includes(o.id) ? "wrong" : ""); return `<button class="opt ${st}" data-o="${o.id}"><span class="l">${o.id}</span><span>${esc(o.text)}</span></button>${st === "wrong" ? `<div class="fb">${esc(o.why)}</div>` : ""}${st === "right" ? `<div class="fb">${esc(q.ok)}</div>` : ""}`; }).join("")}</div>`).join("") +
+      `<div class="box">做完三問，就可以前往「第 2 節」畫你的公仔草圖。<br><button class="pri" data-go="t2" style="margin-top:8px">前往想像挑戰 →</button></div>`;
+    $$(".q", el).forEach((qe) => { const i = +qe.dataset.q, q = T.q[i]; $$(".opt", qe).forEach((b) => b.onclick = () => { if (S.solved[i]) return; const id = b.dataset.o; if (id === q.answer) { S.solved[i] = true; } else { S.tries[i] = (S.tries[i] || []).concat(id).filter((v, k, a) => a.indexOf(v) === k); } save(); renderQ(); renderOut(); }); });
+    $$("[data-go]", el).forEach((b) => b.onclick = () => tab(b.dataset.go));
+  }
+
+  /* ---------- 第2節 ---------- */
+  const FIXES = ["把底座加寬", "在懸空處加支撐", "把懸空的部位改小、改斜", "把細的地方加粗", "換個方向擺放", "分成兩塊分開印再黏起來"];
+  const MATS = ["（請選擇）", "FDM＋PLA", "FDM＋其他耗材（ABS 等）", "光固化＋樹脂"];
+  function renderS2() {
+    const el = $("#t2"); if (!S.flipped) { el.innerHTML = `<h2>第 2 節・想像挑戰</h2>` + gate(); $$("[data-go]", el).forEach((b) => b.onclick = () => tab("t0")); return; }
+    const f = S.f;
+    el.innerHTML = `<h2>第 2 節・想像挑戰：設計我的公仔</h2><span class="time">兩節課共 65 分鐘（第 1 節畫草圖、第 2 節完成）</span>
+    <div class="card"><div class="k">我要設計的是</div><div class="v">${esc(T.role)}，${esc(T.limit.text)}</div><div class="k">它要用在</div><div style="font-weight:700">${esc(T.scene.text)}</div></div>
+    <h3>① 它叫什麼名字？有什麼故事？</h3>
+    <input type="text" id="f-name" maxlength="20" placeholder="公仔的名字" value="${esc(f.name || "")}"><label class="f" for="f-story">一句話說說它的故事（它從哪裡來？想做什麼？）</label><textarea id="f-story" maxlength="120">${esc(f.story || "")}</textarea>
+    <h3>② 畫草圖，並用標記告訴工程師哪裡要注意</h3>
+    <p class="hint">用手指或滑鼠畫。畫完後，用「懸空、支撐、底座」三種標記，把你想到的結構問題標出來。</p>
+    <div class="tools" id="tools"><button class="sec on" data-tool="pen">✏️ 畫筆</button><button class="sec" data-tool="eraser">🧽 橡皮擦</button>
+      ${["#111827", "#2563eb", "#16a34a", "#d97706", "#9333ea"].map((c, i) => `<button class="sw${i === 0 ? " on" : ""}" data-c="${c}" style="background:${c}" aria-label="顏色 ${i + 1}"></button>`).join("")}</div>
+    <div class="tools"><button class="sec" data-tool="s-over">🔴 標「懸空」</button><button class="sec" data-tool="s-sup">🔵 標「支撐」</button><button class="sec" data-tool="s-base">🟩 標「底座」</button><button class="sec" id="undo">↩️ 復原</button><button class="sec" id="clr">🗑️ 全部清掉</button></div>
+    <canvas id="cv" class="cv" width="900" height="600" aria-label="草圖畫板"></canvas>
+    <h3>③ 工程師檢查</h3>
+    <label class="f">我預測，這個公仔最容易印失敗的地方是…</label><textarea id="f-risk" maxlength="140">${esc(f.risk || "")}</textarea>
+    <label class="f">我打算怎麼解決？（可複選）</label>${FIXES.map((x, i) => `<label class="chk"><input type="checkbox" data-fix="${i}" ${S.fix[i] ? "checked" : ""}><span>${x}</span></label>`).join("")}
+    <label class="f" for="f-mat">我選擇的機型與材料</label><select id="f-mat">${MATS.map((m) => `<option ${f.mat === m ? "selected" : ""}>${m}</option>`).join("")}</select>
+    <label class="f" for="f-why">我這樣選的理由（要提到使用情境）</label><textarea id="f-why" maxlength="160">${esc(f.why || "")}</textarea>
+    <h3>④ 想像加分卡</h3>
+    <div class="card"><div class="k">你的公仔還有一個秘密功能</div><div class="v">${esc(T.bonus.text)}</div><div class="hint">想一想：${esc(T.bonus.think)}</div></div>
+    <label class="f" for="f-bonus">我怎麼設計這個秘密功能？（可以寫，也可以回到草圖上畫出來）</label><textarea id="f-bonus" maxlength="200">${esc(f.bonus || "")}</textarea>
+    <h3>⑤ 同學交換，互相挑錯</h3>
+    <p class="hint">和同學交換看草圖，扮演「工程師」，幫對方找出哪裡可能印不出來。</p>
+    <label class="f" for="p-code">同學的任務卡編號</label><input type="text" id="p-code" maxlength="20" value="${esc(S.peer.code || "")}">
+    <label class="f" for="p-find">我發現他的公仔，這裡可能印不出來：</label><textarea id="p-find" maxlength="140">${esc(S.peer.find || "")}</textarea>
+    <label class="f" for="p-adv">我的建議：</label><textarea id="p-adv" maxlength="140">${esc(S.peer.adv || "")}</textarea>
+    <h3>⑥ 我的自評</h3>
+    ${["我能指出自己的公仔哪裡懸空", "我知道為什麼要加底座或支撐", "我的設計裡有我自己想出來的點子"].map((x, i) => `<label class="chk"><input type="checkbox" data-self="${i}" ${S.self[i] ? "checked" : ""}><span>⭐ ${x}</span></label>`).join("")}
+    <div class="box">完成後，到「作品卡」下載你的學習紀錄。</div><button class="pri" data-go="t4">前往作品卡 →</button>`;
+    const bind = (id, key, obj) => { const e = $("#" + id); if (e) e.oninput = () => { (obj || S.f)[key] = e.value; save(); }; };
+    bind("f-name", "name"); bind("f-story", "story"); bind("f-risk", "risk"); bind("f-mat", "mat"); bind("f-why", "why"); bind("f-bonus", "bonus");
+    $("#f-mat").onchange = (e) => { S.f.mat = e.target.value; save(); };
+    bind("p-code", "code", S.peer); bind("p-find", "find", S.peer); bind("p-adv", "adv", S.peer);
+    $$("[data-fix]", el).forEach((c) => c.onchange = () => { S.fix[c.dataset.fix] = c.checked; save(); });
+    $$("[data-self]", el).forEach((c) => c.onchange = () => { S.self[c.dataset.self] = c.checked; save(); });
+    $$("[data-go]", el).forEach((b) => b.onclick = () => tab(b.dataset.go));
+    initCanvas();
+  }
+
+  /* ---------- 畫板 ---------- */
+  const D = { tool: "pen", color: "#111827", drawing: false, hist: [] };
+  function initCanvas() {
+    const cv = $("#cv"); if (!cv) return; const g = cv.getContext("2d");
+    const paintBg = () => { g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height); g.strokeStyle = "#e3e8f2"; g.lineWidth = 1; for (let x = 0; x <= cv.width; x += 30) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, cv.height); g.stroke(); } for (let y = 0; y <= cv.height; y += 30) { g.beginPath(); g.moveTo(0, y); g.lineTo(cv.width, y); g.stroke(); } };
+    paintBg(); D.hist = [];
+    if (S.draw) { const im = new Image(); im.onload = () => g.drawImage(im, 0, 0); im.src = S.draw; }
+    const pos = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * cv.width / r.width, (e.clientY - r.top) * cv.height / r.height]; };
+    const snap = () => { try { D.hist.push(g.getImageData(0, 0, cv.width, cv.height)); if (D.hist.length > 25) D.hist.shift(); } catch (e) { } };
+    const persist = () => { try { S.draw = cv.toDataURL("image/png"); save(); } catch (e) { } };
+    function stamp(kind, x, y) {
+      g.save(); g.lineWidth = 4; g.font = "bold 24px sans-serif"; g.textBaseline = "middle";
+      if (kind === "over") { g.strokeStyle = "#dc2626"; g.fillStyle = "#dc2626"; g.beginPath(); g.arc(x, y, 26, 0, 7); g.stroke(); g.fillText("懸空", x + 32, y); }
+      else if (kind === "sup") { g.strokeStyle = "#2563eb"; g.fillStyle = "#2563eb"; for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(x + i * 12, y - 24); g.lineTo(x + i * 12 - 6, y + 24); g.stroke(); } g.fillText("支撐", x + 42, y); }
+      else { g.fillStyle = "rgba(22,163,74,.35)"; g.strokeStyle = "#16a34a"; g.beginPath(); g.rect(x - 70, y - 10, 140, 20); g.fill(); g.stroke(); g.fillStyle = "#15803d"; g.fillText("底座", x + 78, y); }
+      g.restore();
+    }
+    cv.onpointerdown = (e) => { e.preventDefault(); const [x, y] = pos(e); snap();
+      if (D.tool.startsWith("s-")) { stamp(D.tool.slice(2), x, y); persist(); return; }
+      D.drawing = true; cv.setPointerCapture(e.pointerId); g.lineCap = g.lineJoin = "round"; g.lineWidth = D.tool === "eraser" ? 26 : 5; g.strokeStyle = D.tool === "eraser" ? "#fff" : D.color; g.beginPath(); g.moveTo(x, y); g.lineTo(x + .1, y + .1); g.stroke(); };
+    cv.onpointermove = (e) => { if (!D.drawing) return; const [x, y] = pos(e); g.lineTo(x, y); g.stroke(); };
+    const end = () => { if (D.drawing) { D.drawing = false; persist(); } };
+    cv.onpointerup = end; cv.onpointercancel = end;
+    $$("#tools [data-tool], .tools [data-tool]").forEach((b) => b.onclick = () => { D.tool = b.dataset.tool; $$(".tools [data-tool]").forEach((x) => x.classList.toggle("on", x === b)); });
+    $$("#tools [data-c]").forEach((b) => b.onclick = () => { D.color = b.dataset.c; D.tool = "pen"; $$(".tools [data-tool]").forEach((x) => x.classList.toggle("on", x.dataset.tool === "pen")); $$("#tools [data-c]").forEach((x) => x.classList.toggle("on", x === b)); });
+    $("#undo").onclick = () => { const h = D.hist.pop(); if (h) { g.putImageData(h, 0, 0); persist(); } };
+    $("#clr").onclick = () => { if (!confirm("確定要把草圖全部清掉嗎？")) return; snap(); paintBg(); S.draw = ""; save(); };
+  }
+
+  /* ---------- 第3節 ---------- */
+  const LINKS = [
+    ["Bambu Studio 與 Bambu Handy 下載頁", "https://bambulab.com/en-us/download", "電腦版切片軟體、手機版 App 的官方下載入口"],
+    ["Bambu Studio 快速上手教程（官方 Wiki）", "https://wiki.bambulab.com/zh/studio-handy", "工具列、快捷鍵、切片資訊、列印選項都有說明"],
+    ["Bambu Handy 快速入門（官方 Wiki）", "https://wiki.bambulab.com/zh/studio-handy/handy/bambu-handy-quick-start", "手機 App 的綁定與使用"],
+    ["局域網模式（官方 Wiki）", "https://wiki.bambulab.com/zh/knowledge-sharing/enable-lan-mode", "給老師：不連雲端、只在校內網路使用印表機"],
+    ["Tinkercad（免費的瀏覽器 3D 設計）", "https://www.tinkercad.com", "想自己從零設計模型，可以在這裡練習"]
+  ];
+  function renderS3() {
+    const c = S.s3, ck = (k, t) => `<label class="chk"><input type="checkbox" data-s3="${k}" ${c[k] ? "checked" : ""}><span>${t}</span></label>`;
+    $("#t3").innerHTML = `<h2>第 3 節・軟體學習與資源連結</h2><span class="time">40 分鐘</span>
+    <p>前兩節你在紙上標出了懸空、支撐和底座。這一節，換成讓<b>切片軟體</b>幫你檢查。切片就是把模型「切」成一層層的路徑，再加入溫度、速度、支撐等設定，變成印表機看得懂的指令。</p>
+    <div class="box">學校的印表機有 <b>A1 mini、A1、H2S、X2D</b>，都是拓竹（Bambu Lab）的機型，所以我們用 <b>Bambu Studio</b>。各機型的選單位置、版本畫面可能略有不同，但下面四個動作每一款都有。</div>
+    <h3>四個通用動作</h3>
+    <ol class="steps">
+      <li><b class="n">匯入</b><br>把模型檔（.stl 或 .3mf）放進軟體。<br><span class="hint">檢查點：模型出現在虛擬列印板上嗎？大小合理嗎？</span>${ck("a1", "我完成了匯入，並確認模型大小")}</li>
+      <li><b class="n">擺放</b><br>決定模型怎麼躺、怎麼站。<br><span class="hint">想一想：哪一面貼著板子最穩？哪個方向懸空最少？跟你在第 2 節畫的底座是不是同一面？</span>${ck("a2", "我試過至少兩種擺法，並選出比較穩的")}</li>
+      <li><b class="n">支撐</b><br>打開支撐，看軟體幫你加在哪裡。<br><span class="hint">對照：軟體加支撐的地方，和你畫的紅圈「懸空」是同一處嗎？有沒有你沒想到的地方？</span>${ck("a3", "我把軟體的支撐和自己的標記對照過了")}</li>
+      <li><b class="n">預覽</b><br>一層一層往上看，不用真的開印也能先找出問題。<br><span class="hint">檢查：懸空處有支撐嗎？底座夠寬嗎？預估的時間和用料是多少？</span>${ck("a4", "我看完預覽，並寫下一個發現")}</li>
+    </ol>
+    <label class="f" for="s3-note">我在預覽裡的發現（例如：原來這裡也要支撐）</label><textarea id="s3-note" maxlength="160">${esc(c.note || "")}</textarea>
+    <div class="box warn"><b>層高</b>是每一層的厚度。層高越小，細節越漂亮，但時間越久；層高越大，印得快，但表面比較粗。遊戲裡學過的「參數」，在這裡可以親手調。</div>
+    <h3>手機版怎麼學？</h3>
+    <div class="box"><b>Bambu Handy 是遠端控制與監看印表機的手機 App，不是切片軟體。</b>切片要在電腦版 Bambu Studio 做。<br>Handy 能做的事：看列印進度、管理印表機、重印做過的專案。要綁定印表機必須登入帳號，而且需要網路。</div>
+    <table class="t"><tr><th>想做的事</th><th>用電腦版 Bambu Studio</th><th>用手機版 Bambu Handy</th></tr>
+      <tr><td>匯入、擺放、加支撐、預覽</td><td>✅</td><td>—</td></tr><tr><td>看印表機進度</td><td>✅</td><td>✅（需登入、連網）</td></tr><tr><td>課堂上自己動手練習</td><td>✅ 建議</td><td>用來看示範、查資料</td></tr></table>
+    <h3>沒有登入帳號，也可以學</h3>
+    <ol class="steps">
+      <li><b class="n">看官方 Wiki</b>　下面的連結都是公開網頁，直接打開就能讀。</li>
+      <li><b class="n">看老師示範</b>　老師會用教室電腦帶你做一次四個動作。</li>
+      <li><b class="n">用這份學習單練習觀念</b>　懸空、底座、支撐，在紙上標出來，就是在練習判讀預覽畫面。</li>
+      <li><b class="n">用 Tinkercad 練習設計</b>　老師可以建立班級，不需要學生的電子郵件。</li>
+    </ol>
+    <p class="hint">印表機是老師的帳號綁定，學生不需要登入，也不要輸入任何帳號密碼。</p>
+    <h3>學校的四台印表機</h3>
+    <table class="t"><tr><th>機型</th><th>一句話重點</th></tr>
+      <tr><td>A1 mini</td><td>（老師補充）</td></tr><tr><td>A1</td><td>（老師補充）</td></tr><tr><td>H2S</td><td>（老師補充）</td></tr>
+      <tr><td>X2D</td><td>雙噴頭，可以用另一個噴頭專門印支撐材料；列印範圍 256×256×260 mm</td></tr></table>
+    <h3>資源連結</h3><div class="links">${LINKS.map((l) => `<a href="${l[1]}" target="_blank" rel="noopener">${esc(l[0])}<small>${esc(l[2])}</small></a>`).join("")}</div>`;
+    $$("[data-s3]", $("#t3")).forEach((x) => x.onchange = () => { c[x.dataset.s3] = x.checked; save(); });
+    $("#s3-note").oninput = (e) => { c.note = e.target.value; save(); };
+  }
+
+  /* ---------- 作品卡 ---------- */
+  function renderOut() {
+    const solved = T.q.filter((q, i) => S.solved[i]).length;
+    $("#t4").innerHTML = `<h2>我的作品卡</h2><p>把今天的學習存成檔案，交給老師，或留給自己。檔案只存在這台裝置，你按下載才會產生。</p>
+    <div class="card"><div class="k">${esc(ID.cls)} 班 ${esc(ID.seat)} 號 ${esc(S.name)}</div><div class="v">${esc(S.f.name || "（還沒取名字）")}</div><div>${esc(T.role)}・${esc(T.limit.text)}</div><div class="hint">回顧三問完成 ${solved} / 3　草圖：${S.draw ? "已畫" : "還沒畫"}　第 3 節檢核：${["a1", "a2", "a3", "a4"].filter((k) => S.s3[k]).length} / 4</div></div>
+    <p><button class="pri" id="dl-card">⬇️ 下載作品卡（圖片）</button> <button class="sec" id="dl-sk">下載草圖</button> <button class="sec" id="dl-json">下載紀錄（JSON）</button> <button class="sec" id="prt">🖨️ 列印／存成 PDF</button></p>
+    <p class="hint">想換人使用這台裝置：<button class="sec" id="swap">換座號</button></p>`;
+    $("#dl-card").onclick = () => dlCard(); $("#dl-sk").onclick = () => { if (!S.draw) { toast("還沒有草圖"); return; } dl(S.draw, fname("草圖", "png")); };
+    $("#dl-json").onclick = () => dl("data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ 班級: ID.cls, 座號: ID.seat, 姓名: S.name, 任務卡: T.code, 角色: T.role, 限制: T.limit.text, 情境: T.scene.text, 彩蛋: T.bonus.text, 回顧三問: T.q.map((q, i) => ({ 題: q.topic, 完成: !!S.solved[i], 嘗試錯選: S.tries[i] || [] })), 公仔: S.f, 解法: FIXES.filter((x, i) => S.fix[i]), 互評: S.peer, 自評: ["我能指出自己的公仔哪裡懸空", "我知道為什麼要加底座或支撐", "我的設計裡有我自己想出來的點子"].filter((x, i) => S.self[i]), 第3節: S.s3 }, null, 2)), fname("紀錄", "json"));
+    $("#prt").onclick = () => { $$("section.pg").forEach((s) => s.classList.remove("printme")); $("#t4").classList.add("printme"); window.print(); };
+    $("#swap").onclick = () => { showLogin(); };
+  }
+  const KN = { "草圖": "sketch", "紀錄": "record", "作品卡": "card" };
+  const fname = (k, ext) => "3DP_" + String(ID.cls).replace(/[^0-9A-Za-z]/g, "") + "-" + String(ID.seat).padStart(2, "0") + "_" + (KN[k] || k) + "." + ext;
+  function dl(href, name) { const go = (u, rev) => { const a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); if (rev) setTimeout(() => URL.revokeObjectURL(u), 4000); };
+    try { const i = href.indexOf(","), meta = href.slice(5, i), isB64 = /;base64$/.test(meta), body = href.slice(i + 1); let blob; if (isB64) { const bin = atob(body), u8 = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) u8[k] = bin.charCodeAt(k); blob = new Blob([u8], { type: meta.replace(/;base64$/, "") }); } else blob = new Blob([decodeURIComponent(body)], { type: meta.split(";")[0] }); go(URL.createObjectURL(blob), true); } catch (e) { go(href, false); } }
+  function wrap(g, text, x, y, w, lh, max) { let line = "", n = 0; for (const ch of String(text || "")) { if (g.measureText(line + ch).width > w || ch === "\n") { g.fillText(line, x, y); y += lh; line = ch === "\n" ? "" : ch; if (++n >= max) return y; } else line += ch; } if (line) { g.fillText(line, x, y); y += lh; } return y; }
+  function dlCard() {
+    const c = document.createElement("canvas"); c.width = 1240; c.height = 1754; const g = c.getContext("2d"), F = '"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif';
+    g.fillStyle = "#fff"; g.fillRect(0, 0, 1240, 1754); g.fillStyle = "#0a1a33"; g.fillRect(0, 0, 1240, 110); g.fillStyle = "#fff"; g.font = "bold 40px " + F; g.fillText("3DP同樂製造｜我的作品卡", 50, 70);
+    g.font = "26px " + F; g.fillStyle = "#ffd9b0"; g.textAlign = "right"; g.fillText(ID.cls + " 班 " + ID.seat + " 號 " + (S.name || ""), 1190, 70); g.textAlign = "left";
+    g.fillStyle = "#0a1a33"; g.font = "bold 38px " + F; g.fillText(S.f.name || "（我的公仔）", 50, 170);
+    g.font = "26px " + F; g.fillStyle = "#1c2a44"; let y = wrap(g, "角色：" + T.role + "　結構特色：" + T.limit.text, 50, 215, 1140, 38, 2); y = wrap(g, "使用情境：" + T.scene.text, 50, y, 1140, 38, 3);
+    g.fillStyle = "#a24a00"; g.font = "bold 22px " + F; g.fillText("任務卡編號 " + T.code, 50, y + 4); y += 30;
+    const im = new Image(); const finish = () => {
+      g.strokeStyle = "#0a1a33"; g.lineWidth = 3; g.strokeRect(50, y, 1140, 760); if (im.width) g.drawImage(im, 52, y + 2, 1136, 756); y += 800;
+      g.fillStyle = "#0a1a33"; g.font = "bold 28px " + F;
+      const blocks = [["故事", S.f.story], ["最容易失敗的地方", S.f.risk], ["我的解法", FIXES.filter((x, i) => S.fix[i]).join("、")], ["機型與材料", (S.f.mat && S.f.mat.indexOf("請選擇") < 0 ? S.f.mat : "") + (S.f.why ? "：" + S.f.why : "")], ["秘密功能：" + T.bonus.text, S.f.bonus]];
+      blocks.forEach((b) => { if (y > 1640) return; g.fillStyle = "#0a1a33"; g.font = "bold 24px " + F; g.fillText(b[0], 50, y); g.font = "23px " + F; g.fillStyle = "#1c2a44"; y = wrap(g, b[1] || "—", 50, y + 32, 1140, 32, 3) + 8; });
+      g.fillStyle = "#5b6b86"; g.font = "20px " + F; g.fillText("回顧三問完成 " + T.q.filter((q, i) => S.solved[i]).length + " / 3　自評 ⭐ " + [0, 1, 2].filter((i) => S.self[i]).length + " / 3", 50, 1725);
+      dl(c.toDataURL("image/png"), fname("作品卡", "png")); toast("已下載作品卡");
+    };
+    if (S.draw) { im.onload = finish; im.onerror = finish; im.src = S.draw; } else finish();
+  }
+
+  /* ---------- 啟動 ---------- */
+  document.addEventListener("DOMContentLoaded", () => {
+    $("#li-go").onclick = doLogin; ["li-cls", "li-seat", "li-name"].forEach((i) => $("#" + i).addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); }));
+    $$("nav.tabs button").forEach((b) => b.onclick = () => tab(b.dataset.t)); $("#chg").onclick = () => showLogin();
+    if (ID && ID.cls && ID.seat) { load(); start(); } else showLogin();
+  });
+})();
+</script></body></html>
