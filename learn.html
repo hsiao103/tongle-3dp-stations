@@ -159,6 +159,7 @@ ol.steps b.n{color:var(--navy);font-size:17px}
   if (typeof module !== "undefined") module.exports = g.Engine;
 })(typeof window !== "undefined" ? window : globalThis);
 </script><script>(function () {
+  const CONFIG = { ENDPOINT: "", TOKEN: "" }; /* 老師部署 Apps Script 後，把網址貼到 ENDPOINT；留空則不顯示「送出」按鈕 */
   const E = window.Engine, $ = (s, r) => (r || document).querySelector(s), $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }, del(k) { try { localStorage.removeItem(k); } catch (e) { } } };
@@ -418,15 +419,42 @@ ol.steps b.n{color:var(--navy);font-size:17px}
     <div class="hint" id="o-linkmsg">${w.link ? (okLink(w.link) ? "✅ 連結格式正確" : "⚠️ 連結要以 https:// 開頭") : "老師有付費版，可以幫你輸出模型，輸出後把連結貼在這裡。"}</div>
     <div class="row" style="margin-top:6px">${imgBox("img1", "我的 2D 頭像", "還沒有頭像<br>（卡通頭像，不是真實照片）")}${imgBox("img2", "足球公仔 2D 圖", "還沒有足球公仔圖")}</div>
     <p style="margin-top:14px"><button class="pri" id="dl-card">⬇️ 下載作品卡（圖片）</button> <button class="sec" id="dl-json">下載紀錄（JSON）</button> <button class="sec" id="prt">🖨️ 列印／存成 PDF</button></p>
+    ${CONFIG.ENDPOINT ? `<div class="card" style="margin-top:12px"><div class="k">送出給老師</div><div class="hint">按下後，作品卡圖片、草圖和文字會存到老師的雲端資料夾與試算表。需要連網；送出前請確認主題與連結。</div><p style="margin:8px 0 4px"><button class="pri" id="sub-go">☁️ 送出給老師</button></p><div class="hint" id="sub-msg" role="status">${S.sent ? "✅ 上次送出：" + fmtT(S.sent.t) + "（修改後可再送一次）" : "還沒送出"}</div></div>` : ""}
     <p class="hint">想換人使用這台裝置：<button class="sec" id="swap">換座號</button></p>`;
     const bind = (id, k) => { $("#" + id).oninput = (e) => { w[k] = e.target.value; save(); if (k === "topic") { const v = $("#t4 .card .v"); if (v) v.textContent = w.topic || "（還沒填主題）"; } if (k === "link") { const m = $("#o-linkmsg"); m.textContent = w.link ? (okLink(w.link) ? "✅ 連結格式正確" : "⚠️ 連結要以 https:// 開頭") : ""; } }; };
     bind("o-topic", "topic"); bind("o-idea", "idea"); bind("o-link", "link");
     $$("[data-img]", $("#t4")).forEach((i) => i.onchange = () => { const f = i.files && i.files[0]; if (!f) return; shrink(f, (d) => { if (!d) { toast("這個檔案無法讀取"); return; } w[i.dataset.img] = d; if (!save()) { toast("儲存空間不足，圖片太大"); } renderOut(); }); });
     $$("[data-delimg]", $("#t4")).forEach((b) => b.onclick = () => { delete w[b.dataset.delimg]; save(); renderOut(); });
     $("#dl-card").onclick = () => dlCard();
+    if ($("#sub-go")) $("#sub-go").onclick = submitWork;
     $("#dl-json").onclick = () => dl("data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ 班級: ID.cls, 座號: ID.seat, 姓名: S.name, 主題: w.topic || "", 理念: w.idea || "", 作品連結: w.link || "", 足球動作: (POSES.find((x) => x.id === w.pose) || {}).name || "", 描述詞: w.prompt || "", Tripo提示詞: w.tp || "", AI實作完成: ["s1", "s2", "s3", "s4", "s5"].map((k) => !!S.s3[k]), 任務卡: T.code, 角色: T.role, 限制: T.limit.text, 情境: T.scene.text, 回顧三問: T.q.map((q, i) => ({ 題: q.topic, 完成: !!S.solved[i], 嘗試錯選: S.tries[i] || [] })), 公仔: S.f, 互評: S.peer }, null, 2)), fname("紀錄", "json"));
     $("#prt").onclick = () => { $$("section.pg").forEach((x) => x.classList.remove("printme")); $("#t4").classList.add("printme"); window.print(); };
     $("#swap").onclick = () => { showLogin(); };
+  }
+
+  /* ---------- 送出給老師（Google 試算表＋雲端硬碟） ---------- */
+  const fmtT = (t) => { const d = new Date(t); return (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
+  async function buildPayload() {
+    const w = S.w, c = await makeCard();
+    return { token: CONFIG.TOKEN, cls: ID.cls, seat: ID.seat, name: S.name || "", code: T.code, role: T.role, limit: T.limit.text, scene: T.scene.text,
+      pose: (POSES.find((x) => x.id === w.pose) || {}).name || "", solved: T.q.map((q, i) => !!S.solved[i]), wrong: T.q.map((q, i) => (S.tries[i] || []).length),
+      s3: ["s1", "s2", "s3", "s4", "s5"].map((k) => !!S.s3[k]), topic: w.topic || "", idea: w.idea || "", link: w.link || "", prompt: w.prompt || "", tp: w.tp || "",
+      card: c.toDataURL("image/jpeg", 0.86), sketch: S.draw || "", figure: w.img2 || "" };
+  }
+  async function submitWork() {
+    const btn = $("#sub-go"), msg = $("#sub-msg"), w = S.w;
+    if (!w.topic || !w.topic.trim()) { msg.textContent = "請先填「主題」再送出。"; return; }
+    if (w.link && !okLink(w.link)) { msg.textContent = "作品連結要以 https:// 開頭，請修正或清空後再送出。"; return; }
+    btn.disabled = true; msg.textContent = "送出中，請不要關閉頁面…";
+    const ac = new AbortController(), to = setTimeout(() => ac.abort(), 60000);
+    try {
+      const body = JSON.stringify(await buildPayload());
+      const r = await fetch(CONFIG.ENDPOINT, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body, signal: ac.signal });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.err || "server");
+      S.sent = { t: Date.now() }; save(); msg.textContent = "✅ 已送出（" + fmtT(S.sent.t) + "）。修改後可以再送一次，會取代上一次。"; toast("已送出給老師");
+    } catch (e) { msg.textContent = "⚠️ 送出失敗（可能網路不穩）。請先按「下載作品卡」留存，稍後再按一次送出。"; }
+    finally { clearTimeout(to); btn.disabled = false; }
   }
   const KN = { "草圖": "sketch", "紀錄": "record", "作品卡": "card" };
   const fname = (k, ext) => "3DP_" + String(ID.cls).replace(/[^0-9A-Za-z]/g, "") + "-" + String(ID.seat).padStart(2, "0") + "_" + (KN[k] || k) + "." + ext;
@@ -435,7 +463,7 @@ ol.steps b.n{color:var(--navy);font-size:17px}
   function wrap(g, text, x, y, w, lh, max) { let line = "", n = 0; for (const ch of String(text || "")) { if (g.measureText(line + ch).width > w || ch === "\n") { g.fillText(line, x, y); y += lh; line = ch === "\n" ? "" : ch; if (++n >= max) return y; } else line += ch; } if (line) { g.fillText(line, x, y); y += lh; } return y; }
   function loadImg(src) { return new Promise((res) => { if (!src) return res(null); const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; }); }
   function fit(g, im, x, y, W, H) { g.fillStyle = "#f4f7fc"; g.fillRect(x, y, W, H); if (im) { const k = Math.min(W / im.width, H / im.height), w = im.width * k, h = im.height * k; g.drawImage(im, x + (W - w) / 2, y + (H - h) / 2, w, h); } else { g.fillStyle = "#9aa7bd"; g.font = "24px sans-serif"; g.textAlign = "center"; g.fillText("（尚未放圖）", x + W / 2, y + H / 2); g.textAlign = "left"; } g.strokeStyle = "#0a1a33"; g.lineWidth = 3; g.strokeRect(x, y, W, H); }
-  async function dlCard() {
+  async function makeCard() {
     const w = S.w, c = document.createElement("canvas"); c.width = 1240; c.height = 1754; const g = c.getContext("2d"), F = '"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif';
     g.fillStyle = "#fff"; g.fillRect(0, 0, 1240, 1754); g.fillStyle = "#0a1a33"; g.fillRect(0, 0, 1240, 110); g.fillStyle = "#fff"; g.font = "bold 40px " + F; g.fillText("3DP同樂製造｜我的作品卡", 50, 70);
     g.font = "26px " + F; g.fillStyle = "#ffd9b0"; g.textAlign = "right"; g.fillText(ID.cls + " 班 " + ID.seat + " 號 " + (S.name || ""), 1190, 70); g.textAlign = "left";
@@ -449,8 +477,9 @@ ol.steps b.n{color:var(--navy);font-size:17px}
     if (po) { g.fillText("足球動作：" + po.name + "　　任務卡：" + T.code, 50, y + 10); y += 40; }
     if (i3 && y < 1500) { const h = Math.min(250, 1690 - y - 10); g.fillStyle = "#5b6b86"; g.font = "bold 20px " + F; g.fillText("第 2 節草圖", 50, y + 6); fit(g, i3, 50, y + 16, Math.round(h * 1.5), h); }
     g.fillStyle = "#5b6b86"; g.font = "20px " + F; g.fillText("AI 實作 " + ["s1", "s2", "s3", "s4", "s5"].filter((k) => S.s3[k]).length + " / 5　回顧三問 " + T.q.filter((q, i) => S.solved[i]).length + " / 3", 50, 1725);
-    dl(c.toDataURL("image/png"), fname("作品卡", "png")); toast("已下載作品卡");
+    return c;
   }
+  async function dlCard() { const c = await makeCard(); dl(c.toDataURL("image/png"), fname("作品卡", "png")); toast("已下載作品卡"); }
 
   /* ---------- 啟動 ---------- */
   document.addEventListener("DOMContentLoaded", () => {
